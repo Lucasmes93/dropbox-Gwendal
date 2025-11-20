@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
 import type { FileItem } from '../types';
+import { deleteFileContent } from '../services/storage';
 import '../styles/Files.css';
 
 export const Trash = () => {
@@ -84,11 +85,21 @@ export const Trash = () => {
   };
 
   const handleDeletePermanently = (item: FileItem) => {
+    // Supprimer le contenu du fichier si c'est un fichier
+    if (item.type === 'fichier') {
+      deleteFileContent(item.id);
+    }
     updateAllFiles(files => files.filter(f => f.id !== item.id));
     setShowConfirm(null);
   };
 
   const handleEmptyTrash = () => {
+    // Supprimer le contenu de tous les fichiers de la corbeille
+    trashedFiles.forEach(item => {
+      if (item.type === 'fichier') {
+        deleteFileContent(item.id);
+      }
+    });
     updateAllFiles(files => files.filter(f => !f.estSupprime));
     setShowConfirm(null);
   };

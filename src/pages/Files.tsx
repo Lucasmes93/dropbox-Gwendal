@@ -6,6 +6,7 @@ import { UploadModal } from '../components/UploadModal';
 import { CreateFolderModal } from '../components/CreateFolderModal';
 import { RenameModal } from '../components/RenameModal';
 import { ShareModal } from '../components/ShareModal';
+import { saveFileContent, getFileContent, deleteFileContent, base64ToBlob } from '../services/storage';
 import '../styles/Files.css';
 
 interface PathItem {
@@ -202,22 +203,38 @@ export const Files = () => {
     setAllFiles(prev => prev.map(f =>
       f.id === item.id ? { ...f, estSupprime: true } : f
     ));
+    // Note: On ne supprime pas le contenu du fichier pour permettre la restauration
     setContextMenu(null);
   };
 
   const downloadFile = (item: FileItem) => {
-    // Pour une vraie app, on ferait un appel API pour récupérer le fichier
-    // Ici, on simule avec un blob
-    const content = `Contenu du fichier ${item.nom}\n\nCeci est un fichier de démonstration.`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = item.nom;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    // Récupérer le contenu réel du fichier
+    const fileContent = getFileContent(item.id);
+    
+    if (fileContent) {
+      // Utiliser le contenu stocké
+      const blob = base64ToBlob(fileContent, item.mimeType);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = item.nom;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      // Fichier mock ou ancien fichier sans contenu stocké
+      const content = `Contenu du fichier ${item.nom}\n\nCeci est un fichier de démonstration.`;
+      const blob = new Blob([content], { type: item.mimeType || 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = item.nom;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
   };
 
   const downloadFolder = async (folder: FileItem) => {
@@ -249,9 +266,16 @@ export const Files = () => {
     
     // Ajouter tous les fichiers au ZIP
     for (const { file, path } of filesToZip) {
-      // Simuler le contenu du fichier
-      const content = `Contenu du fichier ${file.nom}\n\nCeci est un fichier de démonstration.`;
-      zip.file(path, content);
+      const fileContent = getFileContent(file.id);
+      if (fileContent) {
+        // Utiliser le contenu réel stocké
+        const blob = base64ToBlob(fileContent, file.mimeType);
+        zip.file(path, blob);
+      } else {
+        // Fichier mock ou ancien fichier sans contenu
+        const content = `Contenu du fichier ${file.nom}\n\nCeci est un fichier de démonstration.`;
+        zip.file(path, content);
+      }
     }
 
     // Générer le ZIP et le télécharger
@@ -403,16 +427,26 @@ export const Files = () => {
         {uploadModalOpen && (
           <UploadModal
             onClose={() => setUploadModalOpen(false)}
-            onUpload={(file) => {
+            onUpload={async (file) => {
+              const fileId = Date.now().toString();
               const newFile: FileItem = {
-                id: Date.now().toString(),
+                id: fileId,
                 nom: file.name,
                 type: 'fichier',
                 taille: file.size,
                 dateModification: new Date().toISOString(),
                 extension: file.name.split('.').pop(),
                 parentId: currentFolderId,
+                mimeType: file.type || 'application/octet-stream',
               };
+              
+              // Sauvegarder le contenu du fichier
+              try {
+                await saveFileContent(fileId, file);
+              } catch (error) {
+                console.error('Erreur lors de la sauvegarde du contenu:', error);
+              }
+              
               // Ajouter au tableau global et mettre à jour l'affichage
               setAllFiles(prev => [...prev, newFile]);
               setUploadModalOpen(false);

@@ -1,6 +1,7 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
+import type { FileItem } from '../types';
 import '../styles/Profile.css';
 
 export const Profile = () => {
@@ -14,10 +15,38 @@ export const Profile = () => {
   const [message, setMessage] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [storageUsed, setStorageUsed] = useState(0);
+  const [storageTotal] = useState(10 * 1024 * 1024 * 1024); // 10 Go en octets
 
-  // Mock storage info
-  const storageUsed = 6.5; // Go
-  const storageTotal = 10; // Go
+  // Calculer le stockage utilisé réellement
+  useEffect(() => {
+    const calculateStorage = () => {
+      try {
+        const saved = localStorage.getItem('monDrive_files');
+        if (saved) {
+          const allFiles: FileItem[] = JSON.parse(saved);
+          // Calculer la taille totale des fichiers non supprimés
+          const totalSize = allFiles
+            .filter(f => f.type === 'fichier' && !f.estSupprime && f.taille)
+            .reduce((sum, f) => sum + (f.taille || 0), 0);
+          setStorageUsed(totalSize);
+        }
+      } catch (error) {
+        console.error('Erreur lors du calcul du stockage:', error);
+      }
+    };
+
+    calculateStorage();
+    
+    // Écouter les mises à jour
+    const handleUpdate = () => calculateStorage();
+    window.addEventListener('filesUpdated', handleUpdate);
+    
+    return () => window.removeEventListener('filesUpdated', handleUpdate);
+  }, []);
+
+  const storageUsedGB = storageUsed / (1024 * 1024 * 1024);
+  const storageTotalGB = storageTotal / (1024 * 1024 * 1024);
   const storagePercent = (storageUsed / storageTotal) * 100;
 
   const handleProfileUpdate = (e: FormEvent) => {
@@ -171,7 +200,7 @@ export const Profile = () => {
               <div className="storage-fill" style={{ width: `${storagePercent}%` }} />
             </div>
             <p className="storage-text">
-              {storageUsed} Go utilisés sur {storageTotal} Go ({storagePercent.toFixed(0)}%)
+              {storageUsedGB.toFixed(2)} Go utilisés sur {storageTotalGB} Go ({storagePercent.toFixed(1)}%)
             </p>
           </div>
         </div>

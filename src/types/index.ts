@@ -14,11 +14,12 @@ export interface FileItem {
   parentId?: string;
   extension?: string;
   estSupprime?: boolean;
+  mimeType?: string; // Type MIME du fichier
 }
 
 export interface ShareLink {
   id: string;
-  fichieId: string;
+  fichierId: string;
   token: string;
   url: string;
   dateExpiration?: string;
