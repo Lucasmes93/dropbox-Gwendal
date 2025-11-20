@@ -1,0 +1,86 @@
+.public-share-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: white;
+  padding: 2rem;
+}
+
+.public-share-container {
+  max-width: 500px;
+  width: 100%;
+  text-align: center;
+}
+
+.public-share-container h1 {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+  color: black;
+}
+
+.file-info-box {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 3rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.file-icon-large {
+  font-size: 4rem;
+}
+
+.file-info-box h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: black;
+  word-break: break-word;
+}
+
+.file-size {
+  color: #666;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.btn-large {
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  margin-top: 1rem;
+}
+
+.error-box {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 2rem;
+  color: #666;
+}
+
+.error-box p {
+  margin: 0;
+  font-size: 1rem;
+}
+
+@media (max-width: 480px) {
+  .public-share-page {
+    padding: 1rem;
+  }
+
+  .file-info-box {
+    padding: 2rem 1rem;
+  }
+
+  .file-icon-large {
+    font-size: 3rem;
+  }
+
+  .file-info-box h2 {
+    font-size: 1.2rem;
+  }
+}
+
