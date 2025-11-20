@@ -3,6 +3,8 @@ export interface User {
   nom: string;
   prenom: string;
   email: string;
+  status?: 'online' | 'away' | 'busy' | 'offline';
+  lastSeen?: string;
 }
 
 export interface FileItem {
@@ -15,6 +17,7 @@ export interface FileItem {
   extension?: string;
   estSupprime?: boolean;
   mimeType?: string; // Type MIME du fichier
+  estFavori?: boolean;
 }
 
 export interface ShareLink {
@@ -31,3 +34,20 @@ export interface StorageInfo {
   total: number;
 }
 
+export interface Message {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  content: string;
+  timestamp: string;
+  read: boolean;
+}
+
+export interface Chat {
+  id: string;
+  userId: string;
+  userName: string;
+  lastMessage?: string;
+  lastMessageTime?: string;
+  unreadCount: number;
+}

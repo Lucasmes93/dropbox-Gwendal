@@ -1,6 +1,10 @@
 import { ReactNode, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Sidebar } from './Sidebar';
+import { SearchBar } from './SearchBar';
+import { ChatPanel } from './ChatPanel';
+import { UserStatus } from './UserStatus';
 import '../styles/Layout.css';
 
 interface LayoutProps {
@@ -12,6 +16,7 @@ export const Layout = ({ children }: LayoutProps) => {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -30,12 +35,24 @@ export const Layout = ({ children }: LayoutProps) => {
           </button>
           <Link to="/files" className="logo">MonDrive</Link>
         </div>
+        <div className="header-center">
+          <SearchBar />
+        </div>
         <div className="header-right">
+          <button 
+            className="chat-button"
+            onClick={() => setChatOpen(!chatOpen)}
+            title="Messages"
+          >
+            💬
+            {chatOpen && <span className="chat-indicator" />}
+          </button>
           <div className="user-menu">
             <button 
               className="user-button"
               onClick={() => setMenuOpen(!menuOpen)}
             >
+              <UserStatus userId={user?.id || ''} />
               {user?.prenom} {user?.nom} ▼
             </button>
             {menuOpen && (
@@ -53,21 +70,11 @@ export const Layout = ({ children }: LayoutProps) => {
       </header>
 
       <div className="main-container">
-        <nav className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-          <Link to="/files" onClick={() => setMobileMenuOpen(false)}>
-            Mes fichiers
-          </Link>
-          <Link to="/trash" onClick={() => setMobileMenuOpen(false)}>
-            Corbeille
-          </Link>
-          <Link to="/profile" onClick={() => setMobileMenuOpen(false)}>
-            Profil
-          </Link>
-        </nav>
-
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
         <main className="content">
           {children}
         </main>
+        {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
       </div>
     </div>
   );

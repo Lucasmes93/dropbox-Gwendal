@@ -16,6 +16,30 @@
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.create-button-container {
+  position: relative;
+}
+
+.btn-create {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #333;
+  color: white;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 300;
+}
+
+.btn-create:hover {
+  background: #555;
 }
 
 .toolbar-right {
@@ -98,6 +122,15 @@
   align-items: center;
   gap: 0.5rem;
   font-weight: 500;
+}
+
+.file-name.file-clickable {
+  cursor: pointer;
+  color: #2196f3;
+}
+
+.file-name.file-clickable:hover {
+  text-decoration: underline;
 }
 
 .file-icon {

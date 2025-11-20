@@ -14,6 +14,8 @@ export const saveFileContent = async (fileId: string, file: File): Promise<void>
         const fileContents = contents ? JSON.parse(contents) : {};
         fileContents[fileId] = reader.result as string; // base64
         localStorage.setItem(FILE_CONTENTS_KEY, JSON.stringify(fileContents));
+        // Également sauvegarder avec une clé spécifique pour faciliter l'accès
+        localStorage.setItem(`monDrive_fileContent_${fileId}`, reader.result as string);
         resolve();
       } catch (error) {
         reject(error);

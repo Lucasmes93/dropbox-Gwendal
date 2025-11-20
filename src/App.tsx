@@ -4,6 +4,11 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Files } from './pages/Files';
+import { Recent } from './pages/Recent';
+import { Favorites } from './pages/Favorites';
+import { Shared } from './pages/Shared';
+import { Search } from './pages/Search';
+import { FileEditor } from './pages/FileEditor';
 import { Trash } from './pages/Trash';
 import { Profile } from './pages/Profile';
 import { PublicShare } from './pages/PublicShare';
@@ -23,6 +28,46 @@ function App() {
             element={
               <ProtectedRoute>
                 <Files />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recent"
+            element={
+              <ProtectedRoute>
+                <Recent />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/favorites"
+            element={
+              <ProtectedRoute>
+                <Favorites />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/shared"
+            element={
+              <ProtectedRoute>
+                <Shared />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <ProtectedRoute>
+                <Search />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/editor/:fileId"
+            element={
+              <ProtectedRoute>
+                <FileEditor />
               </ProtectedRoute>
             }
           />

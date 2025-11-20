@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import JSZip from 'jszip';
 import { Layout } from '../components/Layout';
 import type { FileItem } from '../types';
 import { UploadModal } from '../components/UploadModal';
 import { CreateFolderModal } from '../components/CreateFolderModal';
+import { CreateFileMenu } from '../components/CreateFileMenu';
 import { RenameModal } from '../components/RenameModal';
 import { ShareModal } from '../components/ShareModal';
 import { saveFileContent, getFileContent, deleteFileContent, base64ToBlob } from '../services/storage';
@@ -15,15 +17,18 @@ interface PathItem {
 }
 
 export const Files = () => {
+  const navigate = useNavigate();
   const [files, setFiles] = useState<FileItem[]>([]);
   const [currentPath, setCurrentPath] = useState<PathItem[]>([{ nom: 'Mes fichiers' }]);
   const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [createFolderModalOpen, setCreateFolderModalOpen] = useState(false);
+  const [createFileMenuOpen, setCreateFileMenuOpen] = useState(false);
   const [renameModal, setRenameModal] = useState<{ open: boolean; item?: FileItem }>({ open: false });
   const [shareModal, setShareModal] = useState<{ open: boolean; item?: FileItem }>({ open: false });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: FileItem } | null>(null);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
 
   // Données mock initiales
   const getInitialFiles = (): FileItem[] => [
@@ -182,6 +187,9 @@ export const Files = () => {
     if (file.type === 'dossier') {
       setCurrentPath([...currentPath, { nom: file.nom, id: file.id }]);
       setCurrentFolderId(file.id);
+    } else {
+      // Ouvrir l'éditeur pour les fichiers
+      navigate(`/editor/${file.id}`);
     }
   };
 
@@ -304,6 +312,60 @@ export const Files = () => {
     setContextMenu(null);
   };
 
+  const handleCreateOfficeFile = (type: 'word' | 'excel' | 'powerpoint' | 'text') => {
+    const extensions = {
+      word: 'docx',
+      excel: 'xlsx',
+      powerpoint: 'pptx',
+      text: 'txt',
+    };
+
+    const mimeTypes = {
+      word: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      excel: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      powerpoint: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      text: 'text/plain',
+    };
+
+    const defaultNames = {
+      word: 'Nouveau document.docx',
+      excel: 'Nouvelle feuille de calcul.xlsx',
+      powerpoint: 'Nouvelle présentation.pptx',
+      text: 'Nouveau fichier texte.txt',
+    };
+
+    const defaultContent = {
+      word: 'Document Word créé avec MonDrive',
+      excel: 'Feuille de calcul Excel créée avec MonDrive',
+      powerpoint: 'Présentation PowerPoint créée avec MonDrive',
+      text: 'Fichier texte créé avec MonDrive',
+    };
+
+    const fileId = Date.now().toString();
+    const newFile: FileItem = {
+      id: fileId,
+      nom: defaultNames[type],
+      type: 'fichier',
+      taille: defaultContent[type].length,
+      dateModification: new Date().toISOString(),
+      extension: extensions[type],
+      parentId: currentFolderId,
+      mimeType: mimeTypes[type],
+    };
+
+    // Créer un blob et le sauvegarder
+    const blob = new Blob([defaultContent[type]], { type: mimeTypes[type] });
+    const file = new File([blob], defaultNames[type], { type: mimeTypes[type] });
+    
+    saveFileContent(fileId, file).then(() => {
+      setAllFiles(prev => [...prev, newFile]);
+    }).catch(error => {
+      console.error('Erreur lors de la création du fichier:', error);
+      // Ajouter quand même le fichier même si la sauvegarde échoue
+      setAllFiles(prev => [...prev, newFile]);
+    });
+  };
+
   const filteredFiles = files.filter(file =>
     file.nom.toLowerCase().includes(searchQuery.toLowerCase()) && !file.estSupprime
   );
@@ -313,21 +375,32 @@ export const Files = () => {
       <div className="files-page">
         <div className="toolbar">
           <div className="toolbar-left">
-            <button className="btn-primary" onClick={() => setUploadModalOpen(true)}>
-              Téléverser
-            </button>
-            <button className="btn-secondary" onClick={() => setCreateFolderModalOpen(true)}>
-              Nouveau dossier
-            </button>
-          </div>
-          <div className="toolbar-right">
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Rechercher..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            <div className="create-button-container" style={{ position: 'relative' }}>
+              <button 
+                ref={createButtonRef}
+                className="btn-create"
+                onClick={() => setCreateFileMenuOpen(!createFileMenuOpen)}
+              >
+                +
+              </button>
+              {createFileMenuOpen && (
+                <CreateFileMenu
+                  onClose={() => setCreateFileMenuOpen(false)}
+                  onCreateFile={(type) => {
+                    handleCreateOfficeFile(type);
+                    setCreateFileMenuOpen(false);
+                  }}
+                  onCreateFolder={() => {
+                    setCreateFolderModalOpen(true);
+                    setCreateFileMenuOpen(false);
+                  }}
+                  onUpload={() => {
+                    setUploadModalOpen(true);
+                    setCreateFileMenuOpen(false);
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
 
@@ -359,7 +432,10 @@ export const Files = () => {
             <tbody>
               {filteredFiles.map((file) => (
                 <tr key={file.id}>
-                  <td onClick={() => handleFileClick(file)} className="file-name">
+                  <td 
+                    onClick={() => handleFileClick(file)} 
+                    className={`file-name ${file.type === 'fichier' ? 'file-clickable' : ''}`}
+                  >
                     <span className="file-icon">{file.type === 'dossier' ? '📁' : '📄'}</span>
                     {file.nom}
                   </td>
@@ -416,6 +492,14 @@ export const Files = () => {
                 setContextMenu(null);
               }}>
                 Partager
+              </button>
+              <button onClick={() => {
+                setAllFiles(prev => prev.map(f =>
+                  f.id === contextMenu.item.id ? { ...f, estFavori: !f.estFavori } : f
+                ));
+                setContextMenu(null);
+              }}>
+                {contextMenu.item.estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
               </button>
               <button onClick={() => handleDelete(contextMenu.item)} className="danger">
                 Supprimer
