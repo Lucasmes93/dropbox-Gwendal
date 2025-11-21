@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { BoardModal } from '../../components/BoardModal/BoardModal';
+import { CardModal } from '../../components/CardModal/CardModal';
 import './Boards.scss';
 
 export const Boards = () => {
   const [boards, setBoards] = useState([]);
   const [selectedBoard, setSelectedBoard] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [cardModalColumnId, setCardModalColumnId] = useState(null);
 
   useEffect(() => {
     loadBoards();
@@ -120,21 +124,68 @@ export const Boards = () => {
   };
 
   const handleAddCard = (columnId, boardId) => {
-    const board = boards.find(b => b.id === boardId);
+    setCardModalColumnId(columnId);
+    setSelectedCard(null);
+    setCardModalOpen(true);
+  };
+
+  const handleEditCard = (card, columnId) => {
+    setSelectedCard(card);
+    setCardModalColumnId(columnId);
+    setCardModalOpen(true);
+  };
+
+  const handleSaveCard = (cardData, columnId) => {
+    const board = boards.find(b => b.id === selectedBoard.id);
     if (!board) return;
 
-    const newCard = {
-      id: Date.now().toString(),
-      titre: 'Nouvelle carte',
-    };
+    if (selectedCard) {
+      // Modifier une carte existante
+      const updatedColumns = board.colonnes.map(col => {
+        // Retirer la carte de sa colonne actuelle
+        if (col.cartes.some(c => c.id === selectedCard.id)) {
+          return { ...col, cartes: col.cartes.filter(c => c.id !== selectedCard.id) };
+        }
+        // Ajouter la carte à la nouvelle colonne si elle a changé
+        if (col.id === columnId && !col.cartes.some(c => c.id === cardData.id)) {
+          return { ...col, cartes: [...col.cartes, cardData] };
+        }
+        return col;
+      });
 
-    const updated = board.colonnes.map(col =>
-      col.id === columnId
-        ? { ...col, cartes: [...col.cartes, newCard] }
-        : col
-    );
+      // Si la colonne a changé, s'assurer que la carte est bien dans la nouvelle colonne
+      const targetColumn = updatedColumns.find(col => col.id === columnId);
+      if (targetColumn && !targetColumn.cartes.some(c => c.id === cardData.id)) {
+        targetColumn.cartes.push(cardData);
+      }
 
-    handleSaveBoard({ ...board, colonnes: updated });
+      handleSaveBoard({ ...board, colonnes: updatedColumns });
+    } else {
+      // Créer une nouvelle carte
+      const updated = board.colonnes.map(col =>
+        col.id === columnId
+          ? { ...col, cartes: [...col.cartes, { ...cardData, ordre: col.cartes.length }] }
+          : col
+      );
+
+      handleSaveBoard({ ...board, colonnes: updated });
+    }
+  };
+
+  const handleDeleteCard = () => {
+    if (!selectedCard) return;
+    
+    const board = boards.find(b => b.id === selectedBoard.id);
+    if (!board) return;
+
+    const updatedColumns = board.colonnes.map(col => ({
+      ...col,
+      cartes: col.cartes.filter(c => c.id !== selectedCard.id)
+    }));
+
+    handleSaveBoard({ ...board, colonnes: updatedColumns });
+    setCardModalOpen(false);
+    setSelectedCard(null);
   };
 
   const handleMoveCard = (cardId, fromColumnId, toColumnId, boardId, insertIndex = null) => {
@@ -265,8 +316,20 @@ export const Boards = () => {
                               e.currentTarget.style.opacity = '1';
                             }}
                           >
-                            <h4>{card.titre}</h4>
-                            {card.description && <p>{card.description}</p>}
+                            <div className="card-content">
+                              <h4>{card.titre}</h4>
+                              {card.description && <p>{card.description}</p>}
+                            </div>
+                            <button
+                              className="card-edit-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditCard(card, column.id);
+                              }}
+                              title="Modifier la carte"
+                            >
+                              ✏️
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -298,6 +361,20 @@ export const Boards = () => {
               setSelectedBoard(updated.length > 0 ? updated[0] : null);
               setModalOpen(false);
             }}
+          />
+        )}
+
+        {cardModalOpen && selectedBoard && (
+          <CardModal
+            card={selectedCard}
+            board={selectedBoard}
+            onClose={() => {
+              setCardModalOpen(false);
+              setSelectedCard(null);
+              setCardModalColumnId(null);
+            }}
+            onSave={handleSaveCard}
+            onDelete={selectedCard ? handleDeleteCard : undefined}
           />
         )}
       </div>

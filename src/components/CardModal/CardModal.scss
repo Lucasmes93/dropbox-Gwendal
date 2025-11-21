@@ -1,0 +1,21 @@
+@use '../Modal/Modal.scss' as *;
+
+.card-modal {
+  max-width: 500px;
+}
+
+.card-modal select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  background: white;
+  cursor: pointer;
+}
+
+.card-modal select:focus {
+  outline: none;
+  border-color: #2196f3;
+}
+
