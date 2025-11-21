@@ -38,6 +38,23 @@
   font-size: 1rem;
 }
 
+.share-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.2em 0.6em;
+  background-color: #e3f2fd;
+  color: #1976d2;
+  border-radius: 12px;
+  font-size: 0.75em;
+  font-weight: 500;
+}
+
+.page-description {
+  color: #666;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
 // Responsive
 @media (max-width: 1023px) {
   .shared-with-me-page {

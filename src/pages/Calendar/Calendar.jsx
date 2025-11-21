@@ -14,39 +14,25 @@ export const Calendar = () => {
   useEffect(() => {
     loadEvents();
 
-    // Écouter les événements de synchronisation automatique avec debounce
-    let timeoutId;
-    let isUpdating = false;
+    // Écouter les événements de synchronisation automatique
     const handleDataSynced = (e) => {
-      if (isUpdating) return;
       const customEvent = e;
       if (customEvent.detail?.key === 'monDrive_calendar') {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-          try {
-            const updated = customEvent.detail.value;
-            // Comparer avec l'état actuel pour éviter les re-renders inutiles
-            const currentSerialized = JSON.stringify(events);
-            const updatedSerialized = JSON.stringify(updated);
-            if (updatedSerialized !== currentSerialized) {
-              isUpdating = true;
-              setEvents(updated);
-              setTimeout(() => { isUpdating = false; }, 100);
-            }
-          } catch (error) {
-            console.error('Erreur lors de la synchronisation du calendrier:', error);
-          }
-        }, 200); // Debounce de 200ms
+        try {
+          const updated = customEvent.detail.value;
+          setEvents(updated);
+        } catch (error) {
+          console.error('Erreur lors de la synchronisation du calendrier:', error);
+        }
       }
     };
 
     window.addEventListener('dataSynced', handleDataSynced);
     
     return () => {
-      clearTimeout(timeoutId);
       window.removeEventListener('dataSynced', handleDataSynced);
     };
-  }, [events]); // Dépendance nécessaire pour la comparaison
+  }, []); // Charger une seule fois au montage
 
   const loadEvents = () => {
     try {

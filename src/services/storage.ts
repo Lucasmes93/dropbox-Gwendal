@@ -1,8 +1,9 @@
-import type { FileItem, ShareLink } from '../types';
+import type { FileItem, ShareLink, CompanyShare } from '../types';
 
 const FILES_KEY = 'monDrive_files';
 const FILE_CONTENTS_KEY = 'monDrive_fileContents';
 const SHARE_LINKS_KEY = 'monDrive_shareLinks';
+const COMPANY_SHARES_KEY = 'monDrive_companyShares';
 
 // Stocker le contenu des fichiers (en base64 pour localStorage)
 export const saveFileContent = async (fileId: string, file: File): Promise<void> => {
@@ -118,6 +119,52 @@ export const getShareLinkByFileId = (fileId: string): ShareLink | null => {
   } catch (error) {
     console.error('Erreur lors de la récupération du lien par fichier:', error);
     return null;
+  }
+};
+
+// Gestion des partages avec toute la boîte
+export const saveCompanyShare = (share: CompanyShare): void => {
+  try {
+    const shares = localStorage.getItem(COMPANY_SHARES_KEY);
+    const companyShares: Record<string, CompanyShare> = shares ? JSON.parse(shares) : {};
+    companyShares[share.id] = share;
+    localStorage.setItem(COMPANY_SHARES_KEY, JSON.stringify(companyShares));
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde du partage avec la boîte:', error);
+  }
+};
+
+export const getAllCompanyShares = (): CompanyShare[] => {
+  try {
+    const shares = localStorage.getItem(COMPANY_SHARES_KEY);
+    if (!shares) return [];
+    const companyShares: Record<string, CompanyShare> = JSON.parse(shares);
+    return Object.values(companyShares).filter(share => share.actif);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des partages avec la boîte:', error);
+    return [];
+  }
+};
+
+export const getCompanyShareByFileId = (fileId: string): CompanyShare | null => {
+  try {
+    const allShares = getAllCompanyShares();
+    return allShares.find(share => share.fichierId === fileId) || null;
+  } catch (error) {
+    console.error('Erreur lors de la récupération du partage par fichier:', error);
+    return null;
+  }
+};
+
+export const deleteCompanyShare = (shareId: string): void => {
+  try {
+    const shares = localStorage.getItem(COMPANY_SHARES_KEY);
+    if (!shares) return;
+    const companyShares: Record<string, CompanyShare> = JSON.parse(shares);
+    delete companyShares[shareId];
+    localStorage.setItem(COMPANY_SHARES_KEY, JSON.stringify(companyShares));
+  } catch (error) {
+    console.error('Erreur lors de la suppression du partage:', error);
   }
 };
 

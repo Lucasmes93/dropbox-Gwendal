@@ -147,6 +147,21 @@
   font-size: 1.2rem;
 }
 
+.file-tags {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.file-tag {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+  background: #f0f0f0;
+  border-radius: 3px;
+  color: #666;
+}
+
 .actions-menu {
   display: flex;
   justify-content: center;

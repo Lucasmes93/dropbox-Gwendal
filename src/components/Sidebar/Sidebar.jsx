@@ -90,7 +90,7 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
           onClick={() => handleNavClick('/shared-with-me')}
         >
           <span className="sidebar-icon">👥</span>
-          Partagé avec les cercles
+          Partagé avec moi
         </div>
         <div 
           className={`sidebar-item ${isActive('/trash') ? 'active' : ''}`}

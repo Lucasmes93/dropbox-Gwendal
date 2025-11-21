@@ -8,6 +8,7 @@ import { CreateFileMenu } from '../../components/CreateFileMenu/CreateFileMenu';
 import { FileActionMenu } from '../../components/FileActionMenu/FileActionMenu';
 import { RenameModal } from '../../components/RenameModal/RenameModal';
 import { ShareModal } from '../../components/ShareModal/ShareModal';
+import { TagModal } from '../../components/TagModal/TagModal';
 import { saveFileContent, getFileContent, deleteFileContent, base64ToBlob } from '../../services/storage';
 import './Files.scss';
 
@@ -23,6 +24,7 @@ export const Files = () => {
   const [fileActionMenu, setFileActionMenu] = useState(null);
   const [renameModal, setRenameModal] = useState({ open: false });
   const [shareModal, setShareModal] = useState({ open: false });
+  const [tagModal, setTagModal] = useState({ open: false, item: null });
   const [contextMenu, setContextMenu] = useState(null);
   const createButtonRef = useRef(null);
 
@@ -159,21 +161,12 @@ export const Files = () => {
 
   // Écouter les mises à jour depuis d'autres pages (comme la corbeille) et la synchronisation automatique
   useEffect(() => {
-    let isUpdating = false; // Éviter les boucles infinies
-
     const handleFilesUpdate = () => {
-      if (isUpdating) return; // Éviter les mises à jour simultanées
       try {
         const saved = localStorage.getItem('monDrive_files');
         if (saved) {
           const updated = JSON.parse(saved);
-          // Comparer avec l'état actuel pour éviter les re-renders inutiles
-          const currentSerialized = JSON.stringify(allFiles);
-          if (saved !== currentSerialized) {
-            isUpdating = true;
-            setAllFiles(updated);
-            setTimeout(() => { isUpdating = false; }, 100);
-          }
+          setAllFiles(updated);
         }
       } catch (error) {
         console.error('Erreur lors du rechargement des fichiers:', error);
@@ -182,19 +175,11 @@ export const Files = () => {
 
     // Écouter les événements de synchronisation automatique
     const handleDataSynced = (e) => {
-      if (isUpdating) return; // Éviter les mises à jour simultanées
       const customEvent = e;
       if (customEvent.detail?.key === 'monDrive_files') {
         try {
           const updated = customEvent.detail.value;
-          // Comparer avec l'état actuel pour éviter les re-renders inutiles
-          const currentSerialized = JSON.stringify(allFiles);
-          const updatedSerialized = JSON.stringify(updated);
-          if (updatedSerialized !== currentSerialized) {
-            isUpdating = true;
-            setAllFiles(updated);
-            setTimeout(() => { isUpdating = false; }, 100);
-          }
+          setAllFiles(updated);
         } catch (error) {
           console.error('Erreur lors de la synchronisation des fichiers:', error);
         }
@@ -208,7 +193,7 @@ export const Files = () => {
       window.removeEventListener('filesUpdated', handleFilesUpdate);
       window.removeEventListener('dataSynced', handleDataSynced);
     };
-  }, [allFiles]); // Dépendance nécessaire pour la comparaison
+  }, []); // Charger une seule fois au montage
 
   useEffect(() => {
     // Filtrer les fichiers selon le dossier courant
@@ -532,6 +517,13 @@ export const Files = () => {
                   >
                     <span className="file-icon">{file.type === 'dossier' ? '📁' : '📄'}</span>
                     {file.nom}
+                    {file.tags && file.tags.length > 0 && (
+                      <span className="file-tags">
+                        {file.tags.map(tag => (
+                          <span key={tag} className="file-tag">🏷️ {tag}</span>
+                        ))}
+                      </span>
+                    )}
                   </td>
                   <td>{file.type === 'dossier' ? 'Dossier' : file.extension?.toUpperCase()}</td>
                   <td>{formatSize(file.taille)}</td>
@@ -614,6 +606,12 @@ export const Files = () => {
                       setContextMenu(null);
                     }}>
                       🔗 Partager
+                    </button>
+                    <button onClick={() => {
+                      setTagModal({ open: true, item: contextMenu.item });
+                      setContextMenu(null);
+                    }}>
+                      🏷️ Étiquetter
                     </button>
                     <button onClick={() => {
                       setAllFiles(prev => prev.map(f =>
@@ -699,6 +697,18 @@ export const Files = () => {
           <ShareModal
             item={shareModal.item}
             onClose={() => setShareModal({ open: false })}
+          />
+        )}
+
+        {tagModal.open && tagModal.item && (
+          <TagModal
+            item={tagModal.item}
+            onClose={() => setTagModal({ open: false, item: null })}
+            onSave={(tags) => {
+              setAllFiles(prev => prev.map(f =>
+                f.id === tagModal.item.id ? { ...f, tags } : f
+              ));
+            }}
           />
         )}
 

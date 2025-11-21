@@ -15,12 +15,22 @@ export const Tags = () => {
     try {
       const saved = localStorage.getItem('monDrive_files');
       if (saved) {
-        const allFiles= JSON.parse(saved);
-        setFiles(allFiles.filter(f => !f.estSupprime));
+        const allFiles = JSON.parse(saved);
+        const activeFiles = allFiles.filter(f => !f.estSupprime);
+        setFiles(activeFiles);
         
-        // Extraire les tags (pour l'instant, on simule)
-        const allTags = ['Important', 'Travail', 'Personnel', 'Archive'];
-        setTags(allTags);
+        // Extraire tous les tags uniques des fichiers
+        const allTagsSet = new Set();
+        activeFiles.forEach(file => {
+          if (file.tags && Array.isArray(file.tags)) {
+            file.tags.forEach(tag => allTagsSet.add(tag));
+          }
+        });
+        // Tags par défaut s'il n'y en a pas
+        if (allTagsSet.size === 0) {
+          ['Important', 'Travail', 'Personnel', 'Archive'].forEach(tag => allTagsSet.add(tag));
+        }
+        setTags(Array.from(allTagsSet).sort());
       }
     } catch (error) {
       console.error('Erreur:', error);
@@ -28,7 +38,7 @@ export const Tags = () => {
   };
 
   const filteredFiles = selectedTag
-    ? files.filter(f => f.nom.toLowerCase().includes(selectedTag.toLowerCase()))
+    ? files.filter(f => f.tags && f.tags.includes(selectedTag))
     : files;
 
   return (

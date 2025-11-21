@@ -38,6 +38,29 @@
   font-size: 1rem;
 }
 
+.share-type-badge {
+  display: inline-block;
+  padding: 0.3em 0.7em;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: 500;
+  
+  &.public {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+  }
+  
+  &.company {
+    background-color: #e3f2fd;
+    color: #1976d2;
+  }
+}
+
+.share-info {
+  color: #666;
+  font-size: 0.9em;
+}
+
 // Responsive
 @media (max-width: 1023px) {
   .shared-page {

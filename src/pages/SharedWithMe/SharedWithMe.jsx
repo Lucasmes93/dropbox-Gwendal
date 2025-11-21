@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
+import { getAllCompanyShares } from '../../services/storage';
 import './SharedWithMe.scss';
 
 export const SharedWithMe = () => {
@@ -7,17 +8,34 @@ export const SharedWithMe = () => {
 
   useEffect(() => {
     loadSharedFiles();
+    
+    // Écouter les mises à jour des partages avec la boîte
+    const handleUpdate = () => loadSharedFiles();
+    window.addEventListener('companyShareUpdated', handleUpdate);
+    
+    return () => {
+      window.removeEventListener('companyShareUpdated', handleUpdate);
+    };
   }, []);
 
   const loadSharedFiles = () => {
     try {
       const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
+      const companyShares = getAllCompanyShares();
+      
+      if (saved && companyShares.length > 0) {
         const allFiles = JSON.parse(saved);
-        // Simuler les fichiers partagés avec l'utilisateur
-        // Dans une vraie app, cela viendrait de l'API
-        const shared = allFiles.filter(f => !f.estSupprime).slice(0, 10);
+        // Récupérer les fichiers partagés avec la boîte
+        const shared = companyShares
+          .map(share => {
+            const file = allFiles.find(f => f.id === share.fichierId && !f.estSupprime);
+            return file ? { file, share } : null;
+          })
+          .filter(item => item !== null);
+        
         setSharedFiles(shared);
+      } else {
+        setSharedFiles([]);
       }
     } catch (error) {
       console.error('Erreur:', error);
@@ -35,7 +53,8 @@ export const SharedWithMe = () => {
   return (
     <Layout>
       <div className="files-page">
-        <h1>Partagé avec les cercles</h1>
+        <h1>Partagé avec moi</h1>
+        <p className="page-description">Fichiers et dossiers que d'autres utilisateurs ont partagés avec vous</p>
         <div className="files-table-container">
           <table className="files-table">
             <thead>
@@ -48,16 +67,17 @@ export const SharedWithMe = () => {
               </tr>
             </thead>
             <tbody>
-              {sharedFiles.map((file) => (
+              {sharedFiles.map(({ file, share }) => (
                 <tr key={file.id}>
                   <td>
                     <span className="file-icon">{file.type === 'dossier' ? '📁' : '📄'}</span>
                     {file.nom}
+                    <span className="share-badge">🏢 Partagé avec la boîte</span>
                   </td>
                   <td>{file.type === 'dossier' ? 'Dossier' : file.extension?.toUpperCase()}</td>
                   <td>{formatSize(file.taille)}</td>
-                  <td>Marie Dupont</td>
-                  <td>{new Date(file.dateModification).toLocaleDateString('fr-FR')}</td>
+                  <td>{share.sharedByUserName}</td>
+                  <td>{new Date(share.datePartage).toLocaleDateString('fr-FR')}</td>
                 </tr>
               ))}
             </tbody>

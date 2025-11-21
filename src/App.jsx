@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
@@ -26,12 +26,11 @@ import { Profile } from './pages/Profile/Profile';
 import { PublicShare } from './pages/PublicShare/PublicShare';
 import { NotFound } from './pages/NotFound/NotFound';
 
-function App() {
+function AppRoutes() {
+  const location = useLocation();
+  
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
+    <Routes key={location.pathname}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/s/:token" element={<PublicShare />} />
@@ -192,8 +191,17 @@ function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+  );
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

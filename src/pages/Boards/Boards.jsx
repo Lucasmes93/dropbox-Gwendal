@@ -137,21 +137,39 @@ export const Boards = () => {
     handleSaveBoard({ ...board, colonnes: updated });
   };
 
-  const handleMoveCard = (cardId, fromColumnId, toColumnId, boardId) => {
+  const handleMoveCard = (cardId, fromColumnId, toColumnId, boardId, insertIndex = null) => {
     const board = boards.find(b => b.id === boardId);
     if (!board) return;
 
     let card = null;
+    let fromCardIndex = -1;
+    
+    // Trouver la carte à déplacer
+    const fromColumn = board.colonnes.find(col => col.id === fromColumnId);
+    if (fromColumn) {
+      fromCardIndex = fromColumn.cartes.findIndex(c => c.id === cardId);
+      if (fromCardIndex !== -1) {
+        card = fromColumn.cartes[fromCardIndex];
+      }
+    }
+
+    if (!card) return;
+
     const updatedColumns = board.colonnes.map(col => {
       if (col.id === fromColumnId) {
-        const cardIndex = col.cartes.findIndex(c => c.id === cardId);
-        if (cardIndex !== -1) {
-          card = col.cartes[cardIndex];
-          return { ...col, cartes: col.cartes.filter(c => c.id !== cardId) };
-        }
+        // Retirer la carte de la colonne source
+        return { ...col, cartes: col.cartes.filter(c => c.id !== cardId) };
       }
-      if (col.id === toColumnId && card) {
-        return { ...col, cartes: [...col.cartes, card] };
+      if (col.id === toColumnId) {
+        // Ajouter la carte à la colonne destination
+        const newCards = [...col.cartes];
+        if (insertIndex !== null && insertIndex >= 0 && insertIndex <= newCards.length) {
+          newCards.splice(insertIndex, 0, card);
+        } else {
+          newCards.push(card);
+        }
+        // Mettre à jour l'ordre des cartes
+        return { ...col, cartes: newCards.map((c, idx) => ({ ...c, ordre: idx })) };
       }
       return col;
     });
@@ -205,8 +223,35 @@ export const Boards = () => {
                         <h3>{column.nom}</h3>
                         <span className="column-count">{column.cartes.length}</span>
                       </div>
-                      <div className="column-cards">
-                        {column.cartes.map(card => (
+                      <div 
+                        className="column-cards"
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.add('drag-over');
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove('drag-over');
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.remove('drag-over');
+                          const cardId = e.dataTransfer.getData('cardId');
+                          const fromColumn = e.dataTransfer.getData('fromColumn');
+                          if (cardId && fromColumn) {
+                            // Calculer l'index d'insertion
+                            const cards = Array.from(e.currentTarget.children);
+                            const afterElement = cards.find(child => {
+                              const rect = child.getBoundingClientRect();
+                              return e.clientY < rect.top + rect.height / 2;
+                            });
+                            const insertIndex = afterElement ? cards.indexOf(afterElement) : cards.length;
+                            handleMoveCard(cardId, fromColumn, column.id, selectedBoard.id, insertIndex);
+                          }
+                        }}
+                      >
+                        {column.cartes
+                          .sort((a, b) => (a.ordre || 0) - (b.ordre || 0))
+                          .map(card => (
                           <div
                             key={card.id}
                             className="board-card"
@@ -214,15 +259,10 @@ export const Boards = () => {
                             onDragStart={(e) => {
                               e.dataTransfer.setData('cardId', card.id);
                               e.dataTransfer.setData('fromColumn', column.id);
+                              e.currentTarget.style.opacity = '0.5';
                             }}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              const cardId = e.dataTransfer.getData('cardId');
-                              const fromColumn = e.dataTransfer.getData('fromColumn');
-                              if (fromColumn !== column.id) {
-                                handleMoveCard(cardId, fromColumn, column.id, selectedBoard.id);
-                              }
+                            onDragEnd={(e) => {
+                              e.currentTarget.style.opacity = '1';
                             }}
                           >
                             <h4>{card.titre}</h4>

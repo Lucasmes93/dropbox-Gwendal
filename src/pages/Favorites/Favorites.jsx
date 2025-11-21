@@ -6,63 +6,45 @@ export const Favorites = () => {
   const [favoriteFiles, setFavoriteFiles] = useState([]);
 
   useEffect(() => {
-    let isUpdating = false; // Éviter les mises à jour simultanées
-
     const loadFavorites = () => {
-      if (isUpdating) return;
       try {
         const saved = localStorage.getItem('monDrive_files');
         if (saved) {
           const allFiles = JSON.parse(saved);
           const favorites = allFiles.filter(f => f.estFavori && !f.estSupprime);
-          // Comparer avec l'état actuel pour éviter les re-renders inutiles
-          const currentSerialized = JSON.stringify(favoriteFiles);
-          const newSerialized = JSON.stringify(favorites);
-          if (newSerialized !== currentSerialized) {
-            isUpdating = true;
-            setFavoriteFiles(favorites);
-            setTimeout(() => { isUpdating = false; }, 100);
-          }
+          setFavoriteFiles(favorites);
         } else {
-          if (favoriteFiles.length > 0) {
-            setFavoriteFiles([]);
-          }
+          setFavoriteFiles([]);
         }
       } catch (error) {
         console.error('Erreur lors du chargement des favoris:', error);
-        if (favoriteFiles.length > 0) {
-          setFavoriteFiles([]);
-        }
+        setFavoriteFiles([]);
       }
     };
 
     // Charger immédiatement
     loadFavorites();
     
-    // Écouter les mises à jour avec debounce
-    let timeoutId;
+    // Écouter les mises à jour
     const handleUpdate = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(loadFavorites, 200); // Debounce de 200ms
+      loadFavorites();
     };
     window.addEventListener('filesUpdated', handleUpdate);
     
-    // Écouter les événements de synchronisation avec debounce
+    // Écouter les événements de synchronisation
     const handleDataSynced = (e) => {
       const customEvent = e;
       if (customEvent.detail?.key === 'monDrive_files') {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(loadFavorites, 200); // Debounce de 200ms
+        loadFavorites();
       }
     };
     window.addEventListener('dataSynced', handleDataSynced);
     
     return () => {
-      clearTimeout(timeoutId);
       window.removeEventListener('filesUpdated', handleUpdate);
       window.removeEventListener('dataSynced', handleDataSynced);
     };
-  }, [favoriteFiles]); // Dépendance nécessaire pour la comparaison
+  }, []); // Charger une seule fois au montage
 
   const formatSize = (bytes) => {
     if (!bytes) return '-';

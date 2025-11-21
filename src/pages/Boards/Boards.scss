@@ -117,6 +117,13 @@
   flex-direction: column;
   gap: 0.75rem;
   min-height: 100px;
+  transition: background 0.2s;
+}
+
+.column-cards.drag-over {
+  background: #e8f4f8;
+  border: 2px dashed #2196f3;
+  border-radius: 4px;
 }
 
 .board-card {
@@ -125,11 +132,16 @@
   border-radius: 4px;
   padding: 1rem;
   cursor: move;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s, opacity 0.2s;
+  user-select: none;
 }
 
 .board-card:hover {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.board-card:active {
+  cursor: grabbing;
 }
 
 .board-card h4 {

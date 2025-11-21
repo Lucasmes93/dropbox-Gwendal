@@ -18,6 +18,7 @@ export interface FileItem {
   estSupprime?: boolean;
   mimeType?: string; // Type MIME du fichier
   estFavori?: boolean;
+  tags?: string[]; // Étiquettes du fichier/dossier
 }
 
 export interface ShareLink {
@@ -26,6 +27,16 @@ export interface ShareLink {
   token: string;
   url: string;
   dateExpiration?: string;
+  actif: boolean;
+  shareWithCompany?: boolean; // Partagé avec toute la boîte
+}
+
+export interface CompanyShare {
+  id: string;
+  fichierId: string;
+  sharedByUserId: string; // ID de l'utilisateur qui a partagé
+  sharedByUserName: string; // Nom de l'utilisateur qui a partagé
+  datePartage: string;
   actif: boolean;
 }
 

@@ -11,50 +11,32 @@ export const Notes = () => {
   useEffect(() => {
     loadNotes();
 
-    // Écouter les événements de synchronisation automatique avec debounce
-    let timeoutId;
-    let isUpdating = false;
+    // Écouter les événements de synchronisation automatique
     const handleDataSynced = (e) => {
-      if (isUpdating) return;
       const customEvent = e;
       if (customEvent.detail?.key === 'monDrive_notes') {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-          try {
-            const updated = customEvent.detail.value;
-            // Comparer avec l'état actuel pour éviter les re-renders inutiles
-            const currentSerialized = JSON.stringify(notes);
-            const updatedSerialized = JSON.stringify(updated);
-            if (updatedSerialized !== currentSerialized) {
-              isUpdating = true;
-              setNotes(updated);
-              // Si la note sélectionnée a été modifiée, la mettre à jour
-              if (selectedNote) {
-                const updatedNote = updated.find(n => n.id === selectedNote.id);
-                if (updatedNote) {
-                  const currentNoteSerialized = JSON.stringify(selectedNote);
-                  const updatedNoteSerialized = JSON.stringify(updatedNote);
-                  if (updatedNoteSerialized !== currentNoteSerialized) {
-                    setSelectedNote(updatedNote);
-                  }
-                }
-              }
-              setTimeout(() => { isUpdating = false; }, 100);
+        try {
+          const updated = customEvent.detail.value;
+          setNotes(updated);
+          // Si la note sélectionnée existe toujours, la mettre à jour
+          if (selectedNote) {
+            const updatedNote = updated.find(n => n.id === selectedNote.id);
+            if (updatedNote) {
+              setSelectedNote(updatedNote);
             }
-          } catch (error) {
-            console.error('Erreur lors de la synchronisation des notes:', error);
           }
-        }, 200); // Debounce de 200ms
+        } catch (error) {
+          console.error('Erreur lors de la synchronisation des notes:', error);
+        }
       }
     };
 
     window.addEventListener('dataSynced', handleDataSynced);
     
     return () => {
-      clearTimeout(timeoutId);
       window.removeEventListener('dataSynced', handleDataSynced);
     };
-  }, [notes, selectedNote]); // Dépendances nécessaires pour la comparaison
+  }, []); // Charger une seule fois au montage
 
   const loadNotes = () => {
     try {
