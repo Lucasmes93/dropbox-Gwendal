@@ -190,6 +190,31 @@
   background: #f5f5f5;
 }
 
+// Tablette (768px - 1023px)
+@media (max-width: 1023px) {
+  .header {
+    padding: 1rem 1.5rem;
+  }
+
+  .header-center {
+    max-width: 400px;
+    margin: 0 1rem;
+  }
+
+  .sync-status {
+    .sync-text {
+      display: none;
+    }
+  }
+
+  .user-menu-button {
+    span:not(.dropdown-arrow) {
+      display: none;
+    }
+  }
+}
+
+// Mobile (max-width: 768px)
 @media (max-width: 768px) {
   .mobile-menu-button {
     display: block;
@@ -200,7 +225,82 @@
   }
 
   .header {
+    padding: 0.75rem 1rem;
+  }
+
+  .header-left {
+    gap: 0.5rem;
+  }
+
+  .logo {
+    font-size: 1.2rem;
+  }
+
+  .header-right {
+    gap: 0.5rem;
+  }
+
+  .sync-status {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.75rem;
+    
+    .sync-text {
+      display: none;
+    }
+  }
+
+  .chat-button,
+  .notifications-button {
+    padding: 0.4rem 0.75rem;
+    font-size: 1rem;
+  }
+
+  .user-menu-button {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+
+    span:not(.dropdown-arrow) {
+      display: none;
+    }
+  }
+
+  .user-menu-dropdown {
+    right: 0;
+    left: auto;
+    min-width: 120px;
+  }
+
+  .content {
     padding: 1rem;
+  }
+}
+
+// Petit mobile (max-width: 480px)
+@media (max-width: 480px) {
+  .header {
+    padding: 0.5rem;
+  }
+
+  .logo {
+    font-size: 1rem;
+  }
+
+  .sync-status {
+    padding: 0.3rem 0.4rem;
+  }
+
+  .chat-button,
+  .notifications-button {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.9rem;
+  }
+
+  .user-menu-button {
+    padding: 0.3rem 0.5rem;
+  }
+
+  .content {
+    padding: 0.75rem;
   }
 }
 

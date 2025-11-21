@@ -1,4 +1,4 @@
-@import '../Modal/Modal.scss';
+@use '../Modal/Modal.scss' as *;
 
 .upload-modal {
   max-width: 500px;
@@ -68,5 +68,41 @@
 
 .share-url {
   flex: 1;
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .drop-zone {
+    padding: 2rem 1.5rem;
+  }
+
+  .drop-zone-icon {
+    font-size: 2.5rem;
+  }
+
+  .upload-progress {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .share-link-input {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .share-url {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .drop-zone {
+    padding: 1.5rem 1rem;
+  }
+
+  .drop-zone-icon {
+    font-size: 2rem;
+  }
 }
 

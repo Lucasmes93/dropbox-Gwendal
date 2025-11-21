@@ -124,10 +124,115 @@
   font-size: 0.9rem;
 }
 
-@media (max-width: 768px) {
+// Tablette (768px - 1023px)
+@media (max-width: 1023px) {
+  .modal-overlay {
+    padding: 1.5rem;
+  }
+
   .modal {
     padding: 1.5rem;
-    margin: 1rem;
+    max-width: 90%;
+  }
+}
+
+// Mobile (max-width: 768px)
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 1rem;
+    align-items: flex-start;
+    padding-top: 2rem;
+  }
+
+  .modal {
+    padding: 1.25rem;
+    margin: 0;
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 8px 8px 0 0;
+
+    h2 {
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+    }
+  }
+
+  .form-group {
+    margin-bottom: 1.25rem;
+
+    input,
+    textarea,
+    select {
+      padding: 0.65rem;
+      font-size: 0.95rem;
+    }
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+
+    button {
+      width: 100%;
+    }
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger {
+    padding: 0.65rem 1.25rem;
+    font-size: 0.95rem;
+  }
+}
+
+// Petit mobile (max-width: 480px)
+@media (max-width: 480px) {
+  .modal-overlay {
+    padding: 0.5rem;
+    padding-top: 1.5rem;
+  }
+
+  .modal {
+    padding: 1rem;
+    max-height: 90vh;
+
+    h2 {
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+    }
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+
+    label {
+      font-size: 0.9rem;
+      margin-bottom: 0.4rem;
+    }
+
+    input,
+    textarea,
+    select {
+      padding: 0.55rem;
+      font-size: 0.9rem;
+    }
+
+    textarea {
+      min-height: 80px;
+    }
+  }
+
+  .modal-actions {
+    margin-top: 1.25rem;
+    gap: 0.5rem;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger {
+    padding: 0.55rem 1rem;
+    font-size: 0.9rem;
   }
 }
 

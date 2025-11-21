@@ -12,25 +12,39 @@ export const Tasks = () => {
   useEffect(() => {
     loadTasks();
 
-    // Écouter les événements de synchronisation automatique
+    // Écouter les événements de synchronisation automatique avec debounce
+    let timeoutId;
+    let isUpdating = false;
     const handleDataSynced = (e) => {
+      if (isUpdating) return;
       const customEvent = e;
       if (customEvent.detail?.key === 'monDrive_tasks') {
-        try {
-          const updated = customEvent.detail.value;
-          setTasks(updated);
-        } catch (error) {
-          console.error('Erreur lors de la synchronisation des tâches:', error);
-        }
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          try {
+            const updated = customEvent.detail.value;
+            // Comparer avec l'état actuel pour éviter les re-renders inutiles
+            const currentSerialized = JSON.stringify(tasks);
+            const updatedSerialized = JSON.stringify(updated);
+            if (updatedSerialized !== currentSerialized) {
+              isUpdating = true;
+              setTasks(updated);
+              setTimeout(() => { isUpdating = false; }, 100);
+            }
+          } catch (error) {
+            console.error('Erreur lors de la synchronisation des tâches:', error);
+          }
+        }, 200); // Debounce de 200ms
       }
     };
 
     window.addEventListener('dataSynced', handleDataSynced);
     
     return () => {
+      clearTimeout(timeoutId);
       window.removeEventListener('dataSynced', handleDataSynced);
     };
-  }, []);
+  }, [tasks]); // Dépendance nécessaire pour la comparaison
 
   const loadTasks = () => {
     try {

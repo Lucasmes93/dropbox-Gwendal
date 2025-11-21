@@ -31,3 +31,74 @@
   background: #f9f9f9;
 }
 
+.empty-state {
+  padding: 4rem 2rem;
+  text-align: center;
+  color: #999;
+  font-size: 1rem;
+}
+
+// Responsive
+@media (max-width: 1023px) {
+  .trash-page {
+    max-width: 100%;
+  }
+
+  .files-table th,
+  .files-table td {
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .files-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .files-table {
+    min-width: 600px;
+  }
+
+  .files-table th:nth-child(3),
+  .files-table td:nth-child(3),
+  .files-table th:nth-child(4),
+  .files-table td:nth-child(4) {
+    display: none;
+  }
+
+  .files-table th,
+  .files-table td {
+    padding: 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  .empty-state {
+    padding: 2rem 1rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .files-table {
+    min-width: 500px;
+  }
+
+  .files-table th:nth-child(2),
+  .files-table td:nth-child(2) {
+    display: none;
+  }
+
+  .files-table th,
+  .files-table td {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .empty-state {
+    padding: 1.5rem 0.75rem;
+    font-size: 0.85rem;
+  }
+}
+

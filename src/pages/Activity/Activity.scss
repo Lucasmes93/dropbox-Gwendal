@@ -69,3 +69,90 @@
   color: #666;
 }
 
+// Responsive
+@media (max-width: 1023px) {
+  .activity-page {
+    max-width: 100%;
+  }
+
+  .activity-item {
+    padding: 1.25rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .activity-header {
+    margin-bottom: 1.5rem;
+
+    h1 {
+      font-size: 1.5rem;
+    }
+  }
+
+  .activity-filters {
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+  }
+
+  .filter-btn {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.85rem;
+  }
+
+  .activity-timeline {
+    gap: 0.75rem;
+  }
+
+  .activity-item {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .activity-icon {
+    font-size: 1.75rem;
+    width: 45px;
+  }
+
+  .activity-text {
+    font-size: 0.95rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .activity-time {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .activity-header {
+    margin-bottom: 1rem;
+
+    h1 {
+      font-size: 1.25rem;
+    }
+  }
+
+  .filter-btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .activity-item {
+    padding: 0.75rem;
+    gap: 0.6rem;
+  }
+
+  .activity-icon {
+    font-size: 1.5rem;
+    width: 40px;
+  }
+
+  .activity-text {
+    font-size: 0.9rem;
+  }
+
+  .activity-time {
+    font-size: 0.75rem;
+  }
+}
+

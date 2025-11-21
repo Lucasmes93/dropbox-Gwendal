@@ -107,9 +107,59 @@
   padding: 0.25rem;
 }
 
+// Tablette (768px - 1023px)
+@media (max-width: 1023px) {
+  .calendar-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .calendar-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .calendar-day {
+    min-height: 80px;
+  }
+}
+
+// Mobile (max-width: 768px)
 @media (max-width: 768px) {
+  .calendar-page {
+    max-width: 100%;
+  }
+
+  .calendar-header {
+    margin-bottom: 1.5rem;
+    
+    h1 {
+      font-size: 1.5rem;
+    }
+  }
+
+  .calendar-controls {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    width: 100%;
+
+    h2 {
+      min-width: auto;
+      font-size: 1rem;
+    }
+  }
+
+  .calendar-container {
+    padding: 0.75rem;
+  }
+
   .calendar-grid {
     gap: 0;
+  }
+
+  .calendar-day-header {
+    padding: 0.5rem 0.25rem;
+    font-size: 0.8rem;
   }
 
   .calendar-day {
@@ -117,9 +167,64 @@
     padding: 0.25rem;
   }
 
+  .calendar-day-number {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+
   .calendar-event {
     font-size: 0.65rem;
     padding: 0.15rem 0.25rem;
+  }
+
+  .calendar-event-more {
+    font-size: 0.65rem;
+  }
+}
+
+// Petit mobile (max-width: 480px)
+@media (max-width: 480px) {
+  .calendar-header {
+    margin-bottom: 1rem;
+    
+    h1 {
+      font-size: 1.25rem;
+    }
+  }
+
+  .calendar-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+
+    h2 {
+      font-size: 0.9rem;
+      text-align: left;
+    }
+  }
+
+  .calendar-container {
+    padding: 0.5rem;
+  }
+
+  .calendar-day-header {
+    padding: 0.4rem 0.2rem;
+    font-size: 0.7rem;
+  }
+
+  .calendar-day {
+    min-height: 50px;
+    padding: 0.2rem;
+  }
+
+  .calendar-day-number {
+    font-size: 0.75rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .calendar-event {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.2rem;
   }
 }
 

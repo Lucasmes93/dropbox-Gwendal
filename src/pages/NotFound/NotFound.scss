@@ -30,13 +30,57 @@
   margin: 1rem 0 2rem;
 }
 
+// Tablette (768px - 1023px)
+@media (max-width: 1023px) {
+  .not-found-page {
+    padding: 1.5rem;
+  }
+
+  .not-found-container h1 {
+    font-size: 4rem;
+  }
+
+  .not-found-container h2 {
+    font-size: 1.35rem;
+  }
+}
+
+// Mobile (max-width: 768px)
+@media (max-width: 768px) {
+  .not-found-page {
+    padding: 1rem;
+  }
+
+  .not-found-container h1 {
+    font-size: 3.5rem;
+  }
+
+  .not-found-container h2 {
+    font-size: 1.25rem;
+  }
+
+  .not-found-container p {
+    font-size: 0.95rem;
+  }
+}
+
+// Petit mobile (max-width: 480px)
 @media (max-width: 480px) {
+  .not-found-page {
+    padding: 0.75rem;
+  }
+
   .not-found-container h1 {
     font-size: 3rem;
   }
 
   .not-found-container h2 {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
+  }
+
+  .not-found-container p {
+    font-size: 0.9rem;
+    margin: 0.75rem 0 1.5rem;
   }
 }
 

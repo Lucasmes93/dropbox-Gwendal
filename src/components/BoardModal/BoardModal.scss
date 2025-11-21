@@ -1,4 +1,4 @@
-@import '../Modal/Modal.scss';
+@use '../Modal/Modal.scss' as *;
 
 .board-modal {
   max-width: 600px;

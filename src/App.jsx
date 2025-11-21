@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
 import { Login } from './pages/Login/Login';
 import { Register } from './pages/Register/Register';
 import { Files } from './pages/Files/Files';
@@ -27,9 +28,10 @@ import { NotFound } from './pages/NotFound/NotFound';
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/s/:token" element={<PublicShare />} />
@@ -192,6 +194,7 @@ function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

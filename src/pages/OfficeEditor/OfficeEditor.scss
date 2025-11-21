@@ -98,10 +98,40 @@
   gap: 1rem;
 }
 
+// Tablette (768px - 1023px)
+@media (max-width: 1023px) {
+  .office-editor-header {
+    padding: 1rem 1.5rem;
+  }
+
+  .office-editor-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .office-editor-content {
+    padding: 1.5rem;
+  }
+
+  .office-editor-message {
+    padding: 1.75rem;
+  }
+}
+
+// Mobile (max-width: 768px)
 @media (max-width: 768px) {
   .office-editor-header {
     padding: 1rem;
     flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .office-editor-header h1 {
+    font-size: 1.1rem;
+    width: 100%;
+  }
+
+  .office-editor-info {
+    font-size: 0.85rem;
   }
 
   .office-editor-content {
@@ -110,6 +140,62 @@
 
   .office-editor-message {
     padding: 1.5rem;
+    max-width: 100%;
+  }
+
+  .office-editor-message h2 {
+    font-size: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .office-editor-message p {
+    font-size: 0.95rem;
+    margin: 0.75rem 0;
+  }
+
+  .office-editor-actions {
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+
+    button {
+      width: 100%;
+    }
+  }
+}
+
+// Petit mobile (max-width: 480px)
+@media (max-width: 480px) {
+  .office-editor-header {
+    padding: 0.75rem;
+  }
+
+  .office-editor-header h1 {
+    font-size: 1rem;
+  }
+
+  .office-editor-info {
+    font-size: 0.8rem;
+  }
+
+  .office-editor-content {
+    padding: 0.75rem;
+  }
+
+  .office-editor-message {
+    padding: 1.25rem;
+  }
+
+  .office-editor-message h2 {
+    font-size: 1.1rem;
+  }
+
+  .office-editor-message p {
+    font-size: 0.9rem;
+  }
+
+  .office-editor-message ul {
+    padding-left: 1.5rem;
   }
 }
 

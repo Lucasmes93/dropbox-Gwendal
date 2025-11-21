@@ -30,6 +30,12 @@
   text-decoration: none;
   transition: background 0.2s;
   cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-size: inherit;
+  font-family: inherit;
 
   &:hover {
     background: #f5f5f5;
@@ -85,18 +91,80 @@
   transition: width 0.3s;
 }
 
+// Tablette (768px - 1023px)
+@media (max-width: 1023px) {
+  .sidebar {
+    width: 220px;
+  }
+
+  .sidebar-item {
+    padding: 0.65rem 1.25rem;
+    font-size: 0.9rem;
+  }
+
+  .sidebar-section-title {
+    padding: 0.5rem 1.25rem;
+    font-size: 0.7rem;
+  }
+}
+
+// Mobile (max-width: 768px)
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
     left: -250px;
     top: 57px;
     z-index: 150;
-    transition: left 0.3s;
+    transition: left 0.3s ease;
     height: calc(100vh - 57px);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
 
     &.mobile-open {
       left: 0;
     }
+  }
+
+  // Overlay pour fermer le menu mobile
+  .sidebar::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 250px;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .sidebar.mobile-open::before {
+    opacity: 1;
+  }
+}
+
+// Petit mobile (max-width: 480px)
+@media (max-width: 480px) {
+  .sidebar {
+    width: 200px;
+  }
+
+  .sidebar-item {
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .sidebar-icon {
+    font-size: 1rem;
+    width: 20px;
+  }
+
+  .sidebar-storage {
+    padding: 0.75rem 1rem;
+  }
+
+  .storage-text {
+    font-size: 0.75rem;
   }
 }
 

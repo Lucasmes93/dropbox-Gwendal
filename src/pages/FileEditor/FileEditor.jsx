@@ -234,11 +234,19 @@ export const FileEditor = () => {
     };
 
     const interval = setInterval(() => {
-      loadCollaborators();
-      checkForUpdates();
+      try {
+        loadCollaborators();
+        checkForUpdates();
+      } catch (error) {
+        console.error('Erreur lors de la vérification des mises à jour:', error);
+      }
     }, 500); // Vérifier toutes les 500ms pour un temps réel plus fluide
     
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
   }, [fileId, user, content, file]);
 
   if (loading) {

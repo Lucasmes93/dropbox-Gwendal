@@ -55,13 +55,82 @@
   margin: 0;
 }
 
-@media (max-width: 768px) {
-  .profile-section {
-    padding: 1.5rem;
+// Tablette (768px - 1023px)
+@media (max-width: 1023px) {
+  .profile-page {
+    max-width: 100%;
   }
 
-  .profile-page h1 {
-    font-size: 1.5rem;
+  .profile-section {
+    padding: 1.75rem;
+  }
+}
+
+// Mobile (max-width: 768px)
+@media (max-width: 768px) {
+  .profile-page {
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+  }
+
+  .profile-section {
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+
+    h2 {
+      font-size: 1.1rem;
+      margin-bottom: 1.25rem;
+    }
+  }
+
+  .profile-form {
+    gap: 1.25rem;
+  }
+
+  .storage-info {
+    gap: 0.75rem;
+  }
+
+  .storage-bar {
+    height: 20px;
+  }
+
+  .storage-text {
+    font-size: 0.9rem;
+  }
+}
+
+// Petit mobile (max-width: 480px)
+@media (max-width: 480px) {
+  .profile-page {
+    h1 {
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+    }
+  }
+
+  .profile-section {
+    padding: 1rem;
+    margin-bottom: 1rem;
+
+    h2 {
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+  }
+
+  .profile-form {
+    gap: 1rem;
+  }
+
+  .storage-bar {
+    height: 18px;
+  }
+
+  .storage-text {
+    font-size: 0.85rem;
   }
 }
 

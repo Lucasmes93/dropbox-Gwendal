@@ -20,17 +20,28 @@ export const Layout = ({ children }) => {
   const [lastSync, setLastSync] = useState(null);
 
   useEffect(() => {
-    // Mettre à jour le statut de synchronisation
+    // Mettre à jour le statut de synchronisation (moins fréquemment pour éviter les re-renders)
     const updateSyncStatus = () => {
-      setSyncStatus(isSyncActive() ? 'synced' : 'error');
+      const active = isSyncActive();
       const timestamp = getLastSyncTimestamp();
+      setSyncStatus(prev => {
+        const newStatus = active ? 'synced' : 'error';
+        return prev !== newStatus ? newStatus : prev; // Ne mettre à jour que si changé
+      });
       if (timestamp) {
-        setLastSync(new Date(timestamp));
+        const newDate = new Date(timestamp);
+        setLastSync(prev => {
+          // Ne mettre à jour que si la date a vraiment changé (plus de 1 seconde de différence)
+          if (!prev || Math.abs(newDate.getTime() - prev.getTime()) > 1000) {
+            return newDate;
+          }
+          return prev;
+        });
       }
     };
 
-    // Mettre à jour toutes les secondes
-    const interval = setInterval(updateSyncStatus, 1000);
+    // Mettre à jour toutes les 3 secondes (réduit de 1 seconde)
+    const interval = setInterval(updateSyncStatus, 3000);
     updateSyncStatus();
 
     // Écouter les événements de synchronisation
@@ -62,7 +73,13 @@ export const Layout = ({ children }) => {
           >
             ☰
           </button>
-          <Link to="/files" className="logo">MonDrive</Link>
+          <Link to="/files" className="logo" onClick={(e) => {
+            // S'assurer que la navigation fonctionne
+            if (window.location.pathname === '/files') {
+              e.preventDefault();
+              window.location.href = '/files';
+            }
+          }}>MonDrive</Link>
         </div>
         <div className="header-center">
           <SearchBar />

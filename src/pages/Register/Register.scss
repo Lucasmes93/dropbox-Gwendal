@@ -1,4 +1,4 @@
-@import '../Login/Login.scss';
+@use '../Login/Login.scss' as *;
 
 .auth-box {
   max-width: 500px;

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import './Sidebar.scss';
 
 export const Sidebar = ({ mobileOpen, onMobileClose }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [storageUsed, setStorageUsed] = useState(0);
   const [storageTotal] = useState(10 * 1024 * 1024 * 1024); // 10 Go
@@ -34,135 +35,132 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
   const storageUsedMB = storageUsed / (1024 * 1024);
   const isActive = (path) => location.pathname === path;
 
+  const handleNavClick = (path) => {
+    // Fermer le menu mobile si nécessaire
+    if (onMobileClose) {
+      onMobileClose();
+    }
+    
+    // Navigation simple - React Router gère déjà les re-renders
+    if (location.pathname !== path) {
+      navigate(path);
+    }
+  };
+
   return (
     <nav className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-section">
-        <Link 
-          to="/files" 
+        <div 
           className={`sidebar-item ${isActive('/files') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/files')}
         >
           <span className="sidebar-icon">📁</span>
           Tous les fichiers
-        </Link>
-        <Link 
-          to="/recent" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/recent') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/recent')}
         >
           <span className="sidebar-icon">🕐</span>
           Récents
-        </Link>
-        <Link 
-          to="/favorites" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/favorites') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/favorites')}
         >
           <span className="sidebar-icon">⭐</span>
           Favoris
-        </Link>
-        <Link 
-          to="/shared" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/shared') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/shared')}
         >
           <span className="sidebar-icon">🔗</span>
           Partages
-        </Link>
-        <Link 
-          to="/tags" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/tags') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/tags')}
         >
           <span className="sidebar-icon">🏷️</span>
           Étiquettes
-        </Link>
-        <Link 
-          to="/shared-with-me" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/shared-with-me') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/shared-with-me')}
         >
           <span className="sidebar-icon">👥</span>
           Partagé avec les cercles
-        </Link>
-        <Link 
-          to="/trash" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/trash') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/trash')}
         >
           <span className="sidebar-icon">🗑️</span>
           Fichiers supprimés
-        </Link>
+        </div>
       </div>
 
       <div className="sidebar-divider" />
 
       <div className="sidebar-section">
         <div className="sidebar-section-title">Applications</div>
-        <Link 
-          to="/dashboard" 
+        <div 
           className={`sidebar-item ${isActive('/dashboard') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/dashboard')}
         >
           <span className="sidebar-icon">📊</span>
           Tableau de bord
-        </Link>
-        <Link 
-          to="/calendar" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/calendar') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/calendar')}
         >
           <span className="sidebar-icon">📅</span>
           Calendrier
-        </Link>
-        <Link 
-          to="/contacts" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/contacts') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/contacts')}
         >
           <span className="sidebar-icon">👤</span>
           Contacts
-        </Link>
-        <Link 
-          to="/notes" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/notes') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/notes')}
         >
           <span className="sidebar-icon">📝</span>
           Notes
-        </Link>
-        <Link 
-          to="/tasks" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/tasks') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/tasks')}
         >
           <span className="sidebar-icon">✅</span>
           Tâches
-        </Link>
-        <Link 
-          to="/gallery" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/gallery') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/gallery')}
         >
           <span className="sidebar-icon">🖼️</span>
           Photos
-        </Link>
-        <Link 
-          to="/boards" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/boards') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/boards')}
         >
           <span className="sidebar-icon">📋</span>
           Tableaux
-        </Link>
-        <Link 
-          to="/activity" 
+        </div>
+        <div 
           className={`sidebar-item ${isActive('/activity') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/activity')}
         >
           <span className="sidebar-icon">🔔</span>
           Activité
-        </Link>
+        </div>
       </div>
 
       <div className="sidebar-divider" />
@@ -182,14 +180,13 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
             </div>
           </div>
         </div>
-        <Link 
-          to="/settings" 
+        <div 
           className={`sidebar-item ${isActive('/settings') ? 'active' : ''}`}
-          onClick={onMobileClose}
+          onClick={() => handleNavClick('/settings')}
         >
           <span className="sidebar-icon">⚙️</span>
           Paramètres
-        </Link>
+        </div>
       </div>
     </nav>
   );

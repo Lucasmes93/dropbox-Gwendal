@@ -129,25 +129,51 @@ export const Files = () => {
     return getInitialFiles();
   });
 
-  // Sauvegarder dans localStorage à chaque modification
+  // Sauvegarder dans localStorage à chaque modification (avec debounce pour éviter les sauvegardes trop fréquentes)
   useEffect(() => {
-    try {
-      localStorage.setItem('monDrive_files', JSON.stringify(allFiles));
-      // Déclencher un événement personnalisé pour notifier les autres composants
-      window.dispatchEvent(new Event('filesUpdated'));
-    } catch (error) {
-      console.error('Erreur lors de la sauvegarde dans localStorage:', error);
-    }
+    const timeoutId = setTimeout(() => {
+      try {
+        const serialized = JSON.stringify(allFiles);
+        // Vérifier la taille pour éviter les problèmes de quota
+        if (serialized.length > 5 * 1024 * 1024) { // 5MB
+          console.warn('Les fichiers sont très volumineux, cela peut causer des problèmes de performance');
+        }
+        const currentSaved = localStorage.getItem('monDrive_files');
+        // Ne sauvegarder que si les données ont changé
+        if (serialized !== currentSaved) {
+          localStorage.setItem('monDrive_files', serialized);
+          // Déclencher un événement personnalisé pour notifier les autres composants
+          window.dispatchEvent(new Event('filesUpdated'));
+        }
+      } catch (error) {
+        console.error('Erreur lors de la sauvegarde dans localStorage:', error);
+        // Si c'est une erreur de quota, informer l'utilisateur
+        if (error.name === 'QuotaExceededError') {
+          alert('L\'espace de stockage est plein. Veuillez supprimer des fichiers.');
+        }
+      }
+    }, 300); // Debounce de 300ms pour éviter les sauvegardes trop fréquentes
+
+    return () => clearTimeout(timeoutId);
   }, [allFiles]);
 
   // Écouter les mises à jour depuis d'autres pages (comme la corbeille) et la synchronisation automatique
   useEffect(() => {
+    let isUpdating = false; // Éviter les boucles infinies
+
     const handleFilesUpdate = () => {
+      if (isUpdating) return; // Éviter les mises à jour simultanées
       try {
         const saved = localStorage.getItem('monDrive_files');
         if (saved) {
           const updated = JSON.parse(saved);
-          setAllFiles(updated);
+          // Comparer avec l'état actuel pour éviter les re-renders inutiles
+          const currentSerialized = JSON.stringify(allFiles);
+          if (saved !== currentSerialized) {
+            isUpdating = true;
+            setAllFiles(updated);
+            setTimeout(() => { isUpdating = false; }, 100);
+          }
         }
       } catch (error) {
         console.error('Erreur lors du rechargement des fichiers:', error);
@@ -156,11 +182,19 @@ export const Files = () => {
 
     // Écouter les événements de synchronisation automatique
     const handleDataSynced = (e) => {
+      if (isUpdating) return; // Éviter les mises à jour simultanées
       const customEvent = e;
       if (customEvent.detail?.key === 'monDrive_files') {
         try {
           const updated = customEvent.detail.value;
-          setAllFiles(updated);
+          // Comparer avec l'état actuel pour éviter les re-renders inutiles
+          const currentSerialized = JSON.stringify(allFiles);
+          const updatedSerialized = JSON.stringify(updated);
+          if (updatedSerialized !== currentSerialized) {
+            isUpdating = true;
+            setAllFiles(updated);
+            setTimeout(() => { isUpdating = false; }, 100);
+          }
         } catch (error) {
           console.error('Erreur lors de la synchronisation des fichiers:', error);
         }
@@ -174,7 +208,7 @@ export const Files = () => {
       window.removeEventListener('filesUpdated', handleFilesUpdate);
       window.removeEventListener('dataSynced', handleDataSynced);
     };
-  }, []);
+  }, [allFiles]); // Dépendance nécessaire pour la comparaison
 
   useEffect(() => {
     // Filtrer les fichiers selon le dossier courant

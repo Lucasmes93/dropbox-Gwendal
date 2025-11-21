@@ -106,9 +106,89 @@
   gap: 0.5rem;
 }
 
+// Tablette (768px - 1023px)
+@media (max-width: 1023px) {
+  .tasks-list {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.25rem;
+  }
+}
+
+// Mobile (max-width: 768px)
 @media (max-width: 768px) {
+  .tasks-page {
+    max-width: 100%;
+  }
+
+  .tasks-header {
+    margin-bottom: 1.5rem;
+
+    h1 {
+      font-size: 1.5rem;
+    }
+  }
+
+  .tasks-filters {
+    margin-bottom: 1.5rem;
+    gap: 0.4rem;
+  }
+
+  .filter-btn {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.85rem;
+  }
+
   .tasks-list {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .task-card {
+    padding: 1.25rem;
+  }
+
+  .task-header h3 {
+    font-size: 1rem;
+  }
+
+  .task-description {
+    font-size: 0.9rem;
+  }
+}
+
+// Petit mobile (max-width: 480px)
+@media (max-width: 480px) {
+  .tasks-header {
+    margin-bottom: 1rem;
+
+    h1 {
+      font-size: 1.25rem;
+    }
+  }
+
+  .tasks-filters {
+    margin-bottom: 1rem;
+  }
+
+  .filter-btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .task-card {
+    padding: 1rem;
+  }
+
+  .task-header h3 {
+    font-size: 0.95rem;
+  }
+
+  .task-description {
+    font-size: 0.85rem;
+  }
+
+  .task-deadline {
+    font-size: 0.8rem;
   }
 }
 
