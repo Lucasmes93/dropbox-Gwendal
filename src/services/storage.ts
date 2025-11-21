@@ -5,6 +5,18 @@ const FILE_CONTENTS_KEY = 'monDrive_fileContents';
 const SHARE_LINKS_KEY = 'monDrive_shareLinks';
 const COMPANY_SHARES_KEY = 'monDrive_companyShares';
 
+// Fonction pour tester réellement le quota disponible
+const testStorageQuota = (testData: string): boolean => {
+  try {
+    const testKey = '__quota_test__';
+    localStorage.setItem(testKey, testData);
+    localStorage.removeItem(testKey);
+    return true;
+  } catch (e: any) {
+    return e.name === 'QuotaExceededError';
+  }
+};
+
 // Stocker le contenu des fichiers (en base64 pour localStorage)
 export const saveFileContent = async (fileId: string, file: File): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -13,13 +25,36 @@ export const saveFileContent = async (fileId: string, file: File): Promise<void>
       try {
         const contents = localStorage.getItem(FILE_CONTENTS_KEY);
         const fileContents = contents ? JSON.parse(contents) : {};
-        fileContents[fileId] = reader.result as string; // base64
+        const base64Content = reader.result as string;
+        
+        // Vérifier la taille estimée
+        const estimatedSize = base64Content.length;
+        
+        // Tester avec un petit échantillon pour voir si on a assez d'espace
+        const testSize = Math.min(estimatedSize, 10000); // Tester avec 10KB ou la taille réelle si plus petite
+        if (!testStorageQuota('x'.repeat(testSize))) {
+          reject(new Error('QuotaExceededError: L\'espace de stockage est insuffisant. Veuillez supprimer des fichiers.'));
+          return;
+        }
+        
+        // Sauvegarder uniquement dans l'objet centralisé (pas de duplication)
+        fileContents[fileId] = base64Content;
+        
+        // Tester avec la taille réelle avant de sauvegarder
+        const testData = JSON.stringify({ ...fileContents, [fileId]: base64Content });
+        if (!testStorageQuota(testData.substring(0, Math.min(testData.length, 50000)))) {
+          reject(new Error('QuotaExceededError: L\'espace de stockage est insuffisant. Veuillez supprimer des fichiers.'));
+          return;
+        }
+        
         localStorage.setItem(FILE_CONTENTS_KEY, JSON.stringify(fileContents));
-        // Également sauvegarder avec une clé spécifique pour faciliter l'accès
-        localStorage.setItem(`monDrive_fileContent_${fileId}`, reader.result as string);
         resolve();
-      } catch (error) {
-        reject(error);
+      } catch (error: any) {
+        if (error.name === 'QuotaExceededError' || error.message?.includes('QuotaExceededError')) {
+          reject(new Error('QuotaExceededError: L\'espace de stockage est plein. Veuillez supprimer des fichiers.'));
+        } else {
+          reject(error);
+        }
       }
     };
     reader.onerror = reject;
@@ -31,7 +66,12 @@ export const saveFileContent = async (fileId: string, file: File): Promise<void>
 export const getFileContent = (fileId: string): string | null => {
   try {
     const contents = localStorage.getItem(FILE_CONTENTS_KEY);
-    if (!contents) return null;
+    if (!contents) {
+      // Fallback: essayer l'ancienne méthode pour compatibilité
+      const oldContent = localStorage.getItem(`monDrive_fileContent_${fileId}`);
+      if (oldContent) return oldContent;
+      return null;
+    }
     const fileContents = JSON.parse(contents);
     return fileContents[fileId] || null;
   } catch (error) {

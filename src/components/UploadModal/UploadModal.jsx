@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import './UploadModal.scss';
 
-export const UploadModal = ({ onClose, onUpload }) => {
+export const UploadModal = ({ onClose, onUpload, accept, title = 'Téléverser un fichier' }) => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -9,6 +9,11 @@ export const UploadModal = ({ onClose, onUpload }) => {
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
+      // Vérifier le type si accept est spécifié
+      if (accept && !selectedFile.type.match(accept.replace('*', '.*'))) {
+        alert(`Veuillez sélectionner un fichier de type: ${accept}`);
+        return;
+      }
       setFile(selectedFile);
     }
   };
@@ -17,6 +22,11 @@ export const UploadModal = ({ onClose, onUpload }) => {
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
+      // Vérifier le type si accept est spécifié
+      if (accept && !droppedFile.type.match(accept.replace('*', '.*'))) {
+        alert(`Veuillez sélectionner un fichier de type: ${accept}`);
+        return;
+      }
       setFile(droppedFile);
     }
   };
@@ -63,7 +73,7 @@ export const UploadModal = ({ onClose, onUpload }) => {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2>Téléverser un fichier</h2>
+        <h2>{title}</h2>
         
         <div
           className="drop-zone"
@@ -84,6 +94,7 @@ export const UploadModal = ({ onClose, onUpload }) => {
                 Choisir un fichier
                 <input
                   type="file"
+                  accept={accept}
                   style={{ display: 'none' }}
                   onChange={handleFileSelect}
                 />
