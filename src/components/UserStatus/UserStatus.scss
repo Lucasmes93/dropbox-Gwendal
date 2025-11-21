@@ -1,0 +1,24 @@
+.user-status {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid white;
+}
+
+.status-online {
+  background: #4caf50;
+}
+
+.status-away {
+  background: #ff9800;
+}
+
+.status-busy {
+  background: #f44336;
+}
+
+.status-offline {
+  background: #999;
+}
+

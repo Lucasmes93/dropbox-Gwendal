@@ -1,0 +1,87 @@
+.tags-page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.tags-container {
+  display: flex;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.tags-sidebar {
+  width: 250px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.tags-sidebar h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.2rem;
+}
+
+.tags-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tag-item {
+  padding: 0.75rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tag-item:hover {
+  background: #f5f5f5;
+}
+
+.tag-item.active {
+  background: #333;
+  color: white;
+  border-color: #333;
+}
+
+.tags-content {
+  flex: 1;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 2rem;
+}
+
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.file-item:hover {
+  background: #f5f5f5;
+}
+
+@media (max-width: 768px) {
+  .tags-container {
+    flex-direction: column;
+  }
+
+  .tags-sidebar {
+    width: 100%;
+  }
+}
+

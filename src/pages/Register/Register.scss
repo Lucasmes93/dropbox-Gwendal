@@ -1,0 +1,18 @@
+@import '../Login/Login.scss';
+
+.auth-box {
+  max-width: 500px;
+}
+
+.auth-form {
+  gap: 1.25rem;
+}
+
+.form-group {
+  input {
+    &::placeholder {
+      color: #999;
+    }
+  }
+}
+

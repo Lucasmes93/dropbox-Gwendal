@@ -1,0 +1,115 @@
+.office-editor {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 57px);
+  background: white;
+}
+
+.office-editor-loading,
+.office-editor-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 57px);
+  gap: 1rem;
+}
+
+.office-editor-error h2 {
+  color: #666;
+  margin: 0;
+}
+
+.office-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #ddd;
+  background: white;
+  flex-shrink: 0;
+}
+
+.office-editor-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  flex: 1;
+}
+
+.office-editor-info {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.office-editor-content {
+  flex: 1;
+  overflow: auto;
+  padding: 2rem;
+}
+
+.office-editor-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.office-editor-message {
+  max-width: 600px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 2rem;
+}
+
+.office-editor-message h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+}
+
+.office-editor-message p {
+  margin: 1rem 0;
+  line-height: 1.6;
+  color: #666;
+}
+
+.office-editor-message ul {
+  margin: 1rem 0;
+  padding-left: 2rem;
+  color: #666;
+}
+
+.office-editor-message li {
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+
+.office-editor-note {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  padding: 1rem;
+  margin-top: 1.5rem !important;
+}
+
+.office-editor-actions {
+  margin-top: 2rem;
+  display: flex;
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .office-editor-header {
+    padding: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .office-editor-content {
+    padding: 1rem;
+  }
+
+  .office-editor-message {
+    padding: 1.5rem;
+  }
+}
+

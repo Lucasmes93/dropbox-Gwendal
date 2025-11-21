@@ -111,3 +111,13 @@ export const getAllShareLinks = (): ShareLink[] => {
   }
 };
 
+export const getShareLinkByFileId = (fileId: string): ShareLink | null => {
+  try {
+    const allLinks = getAllShareLinks();
+    return allLinks.find(link => link.fichierId === fileId) || null;
+  } catch (error) {
+    console.error('Erreur lors de la récupération du lien par fichier:', error);
+    return null;
+  }
+};
+
