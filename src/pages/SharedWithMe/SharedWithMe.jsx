@@ -38,7 +38,6 @@ export const SharedWithMe = () => {
         setSharedFiles([]);
       }
     } catch (error) {
-      console.error('Erreur:', error);
     }
   };
 

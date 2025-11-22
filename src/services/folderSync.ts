@@ -34,6 +34,7 @@ declare global {
 }
 
 let syncDirectoryHandle: FileSystemDirectoryHandle | null = null;
+let syncSubFolderPath: string | null = null; // Chemin du sous-dossier à synchroniser (ex: "ProjetX" ou "Documents/ProjetX")
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 let isSyncing = false;
 let lastSyncTime: number | null = null;
@@ -44,8 +45,8 @@ export const isFileSystemAccessSupported = () => {
   return 'showDirectoryPicker' in window;
 };
 
-// Sélectionner un dossier de synchronisation
-export const selectSyncFolder = async () => {
+// Sélectionner le dossier principal de l'entreprise
+export const selectMainFolder = async () => {
   if (!isFileSystemAccessSupported()) {
     throw new Error('L\'API File System Access n\'est pas supportée par votre navigateur. Utilisez Chrome, Edge ou Opera.');
   }
@@ -57,14 +58,16 @@ export const selectSyncFolder = async () => {
     
     syncDirectoryHandle = handle;
     syncPath = handle.name;
+    syncSubFolderPath = null; // Réinitialiser le sous-dossier
     
-    // Sauvegarder la référence du dossier dans localStorage (via permission)
-    // Note: On ne peut pas stocker le handle directement, mais on peut demander à nouveau
+    // Sauvegarder la référence du dossier dans localStorage
     localStorage.setItem('monDrive_syncFolderName', handle.name);
+    localStorage.removeItem('monDrive_syncSubFolderPath');
     
     return {
       success: true,
       folderName: handle.name,
+      handle: handle,
     };
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -72,6 +75,52 @@ export const selectSyncFolder = async () => {
     }
     throw error;
   }
+};
+
+// Sélectionner un sous-dossier à synchroniser dans le dossier principal
+export const selectSubFolder = async (mainHandle: FileSystemDirectoryHandle, subFolderPath: string) => {
+  try {
+    const pathParts = subFolderPath.split('/').filter(p => p);
+    let currentDir = mainHandle;
+    
+    // Naviguer vers le sous-dossier
+    for (const part of pathParts) {
+      currentDir = await currentDir.getDirectoryHandle(part);
+    }
+    
+    syncSubFolderPath = subFolderPath;
+    localStorage.setItem('monDrive_syncSubFolderPath', subFolderPath);
+    
+    return {
+      success: true,
+      folderName: pathParts[pathParts.length - 1] || subFolderPath,
+      fullPath: subFolderPath,
+    };
+  } catch (error) {
+    return { success: false, error: `Impossible d'accéder au sous-dossier : ${error.message}` };
+  }
+};
+
+// Obtenir la liste des sous-dossiers disponibles
+export const listSubFolders = async (mainHandle: FileSystemDirectoryHandle): Promise<string[]> => {
+  const folders: string[] = [];
+  
+  try {
+    for await (const entry of mainHandle.values()) {
+      if (entry.kind === 'directory') {
+        folders.push(entry.name);
+      }
+    }
+  } catch (error) {
+    // Ignorer les erreurs
+  }
+  
+  return folders.sort();
+};
+
+// Sélectionner un dossier de synchronisation (compatibilité avec l'ancien code)
+export const selectSyncFolder = async () => {
+  return await selectMainFolder();
 };
 
 // Obtenir le handle du dossier de synchronisation (demander à nouveau)
@@ -84,6 +133,19 @@ const getSyncDirectoryHandle = async (): Promise<FileSystemDirectoryHandle> => {
   if (!syncDirectoryHandle) {
     throw new Error('Aucun dossier de synchronisation sélectionné');
   }
+  
+  // Si un sous-dossier est spécifié, naviguer vers ce sous-dossier
+  if (syncSubFolderPath) {
+    const pathParts = syncSubFolderPath.split('/').filter(p => p);
+    let currentDir = syncDirectoryHandle;
+    
+    for (const part of pathParts) {
+      currentDir = await currentDir.getDirectoryHandle(part);
+    }
+    
+    return currentDir;
+  }
+  
   return syncDirectoryHandle;
 };
 
@@ -104,7 +166,6 @@ const readDirectoryRecursive = async (dirHandle: FileSystemDirectoryHandle, path
           lastModified: file.lastModified,
         });
       } catch (error) {
-        console.error(`Erreur lors de la lecture de ${entry.name}:`, error);
       }
     } else if (entry.kind === 'directory') {
       const subFiles = await readDirectoryRecursive(entry as FileSystemDirectoryHandle, entryPath);
@@ -115,7 +176,47 @@ const readDirectoryRecursive = async (dirHandle: FileSystemDirectoryHandle, path
   return files;
 };
 
-// Synchroniser les fichiers du dossier local vers l'application
+// Créer récursivement la structure de dossiers dans le backend
+const ensureFolderStructure = async (pathParts: string[], existingFolders: any[]): Promise<string | null> => {
+  const api = await import('./api');
+  let currentParentId: string | null = null;
+  
+  for (let i = 0; i < pathParts.length; i++) {
+    const folderName = pathParts[i];
+    const fullPath = pathParts.slice(0, i + 1).join('/');
+    
+    // Chercher si le dossier existe déjà
+    let folder = existingFolders.find(f => 
+      f.nom === folderName && 
+      f.type === 'dossier' &&
+      f.parentId === currentParentId
+    );
+    
+    if (!folder) {
+      // Créer le dossier dans le backend
+      try {
+        folder = await api.api.createFolder(folderName, currentParentId);
+        existingFolders.push(folder);
+      } catch (error) {
+        // Le dossier existe peut-être déjà, continuer
+        folder = existingFolders.find(f => 
+          f.nom === folderName && 
+          f.type === 'dossier' &&
+          f.parentId === currentParentId
+        );
+        if (!folder) {
+          return null; // Impossible de créer le dossier
+        }
+      }
+    }
+    
+    currentParentId = folder.id;
+  }
+  
+  return currentParentId;
+};
+
+// Synchroniser les fichiers du dossier local vers l'application (backend)
 export const syncFromLocalFolder = async (onProgress) => {
   if (isSyncing) {
     return { success: false, error: 'Une synchronisation est déjà en cours' };
@@ -129,26 +230,29 @@ export const syncFromLocalFolder = async (onProgress) => {
 
     isSyncing = true;
     
-    // Lire tous les fichiers du dossier
+    // Lire tous les fichiers du dossier local
     const localFiles = await readDirectoryRecursive(dirHandle);
     
     if (onProgress) {
-      onProgress({ total: localFiles.length, current: 0, status: 'Lecture des fichiers...' });
+      onProgress({ total: localFiles.length, current: 0, status: 'Lecture des fichiers locaux...' });
     }
 
-    // Charger les fichiers existants dans l'application
-    const saved = localStorage.getItem('monDrive_files');
-    const existingFiles = saved ? JSON.parse(saved) : [];
+    // Charger les fichiers existants depuis le backend
+    const api = await import('./api');
+    const existingFiles = await api.api.getFiles();
+    
+    // Créer un index des fichiers existants par chemin local
+    const filesByLocalPath = new Map();
+    existingFiles.forEach(f => {
+      if (f.localPath) {
+        filesByLocalPath.set(f.localPath, f);
+      }
+    });
     
     let syncedCount = 0;
-    const { saveFileContent } = await import('./storage');
+    let createdFolders = 0;
 
-    // Fonction pour générer un ID unique
-    const generateId = () => {
-      return `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    };
-
-    // Pour chaque fichier local, vérifier s'il existe déjà ou le créer
+    // Pour chaque fichier local, vérifier s'il existe déjà ou le créer dans le backend
     for (let i = 0; i < localFiles.length; i++) {
       const localFile = localFiles[i];
       
@@ -160,47 +264,50 @@ export const syncFromLocalFolder = async (onProgress) => {
         });
       }
 
-      // Vérifier si le fichier existe déjà (par nom et chemin)
-      const existingFile = existingFiles.find(f => 
-        f.nom === localFile.name && 
-        f.localPath === localFile.path
-      );
+      try {
+        // Vérifier si le fichier existe déjà (par chemin local)
+        const existingFile = filesByLocalPath.get(localFile.path);
 
-      if (!existingFile || existingFile.lastLocalSync !== localFile.lastModified) {
-        // Créer ou mettre à jour le fichier
-        const fileId = existingFile?.id || generateId();
-        
-        const fileItem = {
-          id: fileId,
-          nom: localFile.name,
-          type: 'fichier',
-          taille: localFile.file.size,
-          dateModification: new Date(localFile.lastModified).toISOString(),
-          extension: localFile.name.split('.').pop()?.toLowerCase() || '',
-          mimeType: localFile.file.type || 'application/octet-stream',
-          localPath: localFile.path,
-          lastLocalSync: localFile.lastModified,
-          syncedFromLocal: true,
-        };
+        // Vérifier si le fichier a été modifié (comparer lastModified)
+        const needsUpdate = !existingFile || 
+          !existingFile.lastLocalSync || 
+          existingFile.lastLocalSync < localFile.lastModified;
 
-        // Sauvegarder le contenu du fichier
-        await saveFileContent(fileId, localFile.file);
+        if (needsUpdate) {
+          // Déterminer le parentId en créant la structure de dossiers si nécessaire
+          let parentId: string | null = null;
+          
+          if (localFile.path !== localFile.name) {
+            // Le fichier est dans un sous-dossier
+            const pathParts = localFile.path.split('/').slice(0, -1); // Exclure le nom du fichier
+            if (pathParts.length > 0) {
+              parentId = await ensureFolderStructure(pathParts, existingFiles);
+              if (parentId) {
+                createdFolders++;
+              }
+            }
+          }
 
-        // Ajouter ou mettre à jour dans la liste
-        if (existingFile) {
-          const index = existingFiles.findIndex(f => f.id === fileId);
-          existingFiles[index] = fileItem;
-        } else {
-          existingFiles.push(fileItem);
+          if (existingFile) {
+            // Mettre à jour le fichier existant dans le backend
+            await api.api.updateFileContent(existingFile.id, localFile.file);
+            
+            // Mettre à jour le timestamp de synchronisation
+            await api.api.updateFileMetadata(existingFile.id, {
+              lastLocalSync: localFile.lastModified,
+              localPath: localFile.path,
+            });
+          } else {
+            // Créer un nouveau fichier dans le backend
+            await api.api.uploadFile(localFile.file, parentId, false);
+          }
+
+          syncedCount++;
         }
-
-        syncedCount++;
+      } catch (error) {
+        // Continuer avec le fichier suivant en cas d'erreur
       }
     }
-
-    // Sauvegarder la liste mise à jour
-    localStorage.setItem('monDrive_files', JSON.stringify(existingFiles));
-    window.dispatchEvent(new Event('filesUpdated'));
 
     lastSyncTime = Date.now();
     isSyncing = false;
@@ -208,16 +315,16 @@ export const syncFromLocalFolder = async (onProgress) => {
     return {
       success: true,
       syncedCount,
+      createdFolders,
       totalFiles: localFiles.length,
     };
   } catch (error) {
     isSyncing = false;
-    console.error('Erreur lors de la synchronisation:', error);
     return { success: false, error: error.message };
   }
 };
 
-// Synchroniser les fichiers de l'application vers le dossier local
+// Synchroniser les fichiers de l'application (backend) vers le dossier local
 export const syncToLocalFolder = async (onProgress) => {
   if (isSyncing) {
     return { success: false, error: 'Une synchronisation est déjà en cours' };
@@ -231,18 +338,21 @@ export const syncToLocalFolder = async (onProgress) => {
 
     isSyncing = true;
 
-    // Charger les fichiers de l'application
-    const saved = localStorage.getItem('monDrive_files');
-    const appFiles = saved ? JSON.parse(saved).filter(f => f.syncedFromLocal) : [];
+    // Charger les fichiers depuis le backend
+    const api = await import('./api');
+    const allFiles = await api.api.getFiles();
+    
+    // Filtrer uniquement les fichiers qui ont un localPath (synchronisés depuis le local)
+    // ou tous les fichiers si on veut synchroniser tout
+    const appFiles = allFiles.filter(f => f.type === 'fichier' && !f.estSupprime);
 
     if (onProgress) {
-      onProgress({ total: appFiles.length, current: 0, status: 'Synchronisation vers le dossier local...' });
+      onProgress({ total: appFiles.length, current: 0, status: 'Téléchargement depuis le serveur...' });
     }
 
-    const { getFileContent, base64ToBlob } = await import('./storage');
     let syncedCount = 0;
 
-    // Pour chaque fichier, l'écrire dans le dossier local
+    // Pour chaque fichier, le télécharger et l'écrire dans le dossier local
     for (let i = 0; i < appFiles.length; i++) {
       const appFile = appFiles[i];
       
@@ -255,24 +365,44 @@ export const syncToLocalFolder = async (onProgress) => {
       }
 
       try {
-        // Récupérer le contenu du fichier
-        const fileContent = getFileContent(appFile.id);
-        if (!fileContent) continue;
+        // Télécharger le fichier depuis le backend (obtenir le blob)
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/files/${appFile.id}/download`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
 
-        // Convertir en Blob
-        const blob = base64ToBlob(fileContent, appFile.mimeType);
+        if (!response.ok) {
+          continue; // Passer au fichier suivant si erreur
+        }
 
-        // Créer le chemin du fichier (gérer les sous-dossiers)
-        const pathParts = appFile.localPath.split('/');
+        const blob = await response.blob();
+        
+        // Déterminer le chemin du fichier
+        // Si le fichier a un localPath, l'utiliser, sinon créer un chemin basé sur la structure
+        let filePath: string;
+        let pathParts: string[];
+        
+        if (appFile.localPath) {
+          filePath = appFile.localPath;
+          pathParts = filePath.split('/');
+        } else {
+          // Construire le chemin basé sur la structure de dossiers dans le backend
+          const path = await buildFilePathFromBackend(appFile.id, allFiles);
+          filePath = path || appFile.nom;
+          pathParts = filePath.split('/');
+        }
+
+        // Créer la structure de dossiers dans le système de fichiers local
         let currentDir = dirHandle;
-
-        // Créer les sous-dossiers si nécessaire
         for (let j = 0; j < pathParts.length - 1; j++) {
           const dirName = pathParts[j];
           try {
             currentDir = await currentDir.getDirectoryHandle(dirName, { create: true });
           } catch (error) {
-            console.error(`Erreur lors de la création du dossier ${dirName}:`, error);
+            // Ignorer les erreurs et continuer
             break;
           }
         }
@@ -284,9 +414,17 @@ export const syncToLocalFolder = async (onProgress) => {
         await writable.write(blob);
         await writable.close();
 
+        // Mettre à jour le localPath dans le backend si nécessaire
+        if (!appFile.localPath) {
+          await api.api.updateFileMetadata(appFile.id, {
+            localPath: filePath,
+            lastLocalSync: Date.now(),
+          });
+        }
+
         syncedCount++;
       } catch (error) {
-        console.error(`Erreur lors de l'écriture de ${appFile.nom}:`, error);
+        // Continuer avec le fichier suivant en cas d'erreur
       }
     }
 
@@ -300,9 +438,28 @@ export const syncToLocalFolder = async (onProgress) => {
     };
   } catch (error) {
     isSyncing = false;
-    console.error('Erreur lors de la synchronisation:', error);
     return { success: false, error: error.message };
   }
+};
+
+// Construire le chemin d'un fichier basé sur la structure de dossiers dans le backend
+const buildFilePathFromBackend = async (fileId: string, allFiles: any[]): Promise<string> => {
+  const file = allFiles.find(f => f.id === fileId);
+  if (!file) return '';
+  
+  const pathParts: string[] = [file.nom];
+  let currentParentId = file.parentId;
+  
+  // Remonter la hiérarchie des dossiers
+  while (currentParentId) {
+    const parent = allFiles.find(f => f.id === currentParentId && f.type === 'dossier');
+    if (!parent) break;
+    
+    pathParts.unshift(parent.nom);
+    currentParentId = parent.parentId;
+  }
+  
+  return pathParts.join('/');
 };
 
 // Synchronisation bidirectionnelle
@@ -345,7 +502,6 @@ export const startAutoSync = async (intervalMs = 30000) => {
   try {
     await syncBidirectional();
   } catch (error) {
-    console.error('Erreur lors de la synchronisation initiale:', error);
     // Ne pas bloquer le démarrage si la première sync échoue
   }
 
@@ -354,7 +510,6 @@ export const startAutoSync = async (intervalMs = 30000) => {
       try {
         await syncBidirectional();
       } catch (error) {
-        console.error('Erreur lors de la synchronisation automatique:', error);
         // Si le handle n'existe plus, arrêter la synchronisation
         if (error.message && (error.message.includes('re-sélectionner') || error.message.includes('Aucun dossier'))) {
           stopAutoSync();
@@ -391,8 +546,19 @@ export const getSyncStatus = () => {
 export const resetSync = () => {
   stopAutoSync();
   syncDirectoryHandle = null;
+  syncSubFolderPath = null;
   syncPath = null;
   lastSyncTime = null;
   localStorage.removeItem('monDrive_syncFolderName');
+  localStorage.removeItem('monDrive_syncSubFolderPath');
+};
+
+// Obtenir le chemin complet du dossier synchronisé
+export const getSyncPath = () => {
+  if (!syncPath) return null;
+  if (syncSubFolderPath) {
+    return `${syncPath}/${syncSubFolderPath}`;
+  }
+  return syncPath;
 };
 

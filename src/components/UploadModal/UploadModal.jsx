@@ -63,7 +63,6 @@ export const UploadModal = ({ onClose, onUpload, accept, title = 'Téléverser u
       
       onClose();
     } catch (error) {
-      console.error('Erreur lors de l\'upload:', error);
     } finally {
       setUploading(false);
       clearInterval(interval);

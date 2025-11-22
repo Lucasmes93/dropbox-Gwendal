@@ -75,7 +75,6 @@ export const getFileContent = (fileId: string): string | null => {
     const fileContents = JSON.parse(contents);
     return fileContents[fileId] || null;
   } catch (error) {
-    console.error('Erreur lors de la récupération du contenu:', error);
     return null;
   }
 };
@@ -89,7 +88,6 @@ export const deleteFileContent = (fileId: string): void => {
     delete fileContents[fileId];
     localStorage.setItem(FILE_CONTENTS_KEY, JSON.stringify(fileContents));
   } catch (error) {
-    console.error('Erreur lors de la suppression du contenu:', error);
   }
 };
 
@@ -112,7 +110,6 @@ export const saveShareLink = (link: ShareLink): void => {
     shareLinks[link.token] = link;
     localStorage.setItem(SHARE_LINKS_KEY, JSON.stringify(shareLinks));
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde du lien:', error);
   }
 };
 
@@ -123,7 +120,6 @@ export const getShareLink = (token: string): ShareLink | null => {
     const shareLinks: Record<string, ShareLink> = JSON.parse(links);
     return shareLinks[token] || null;
   } catch (error) {
-    console.error('Erreur lors de la récupération du lien:', error);
     return null;
   }
 };
@@ -136,7 +132,6 @@ export const deleteShareLink = (token: string): void => {
     delete shareLinks[token];
     localStorage.setItem(SHARE_LINKS_KEY, JSON.stringify(shareLinks));
   } catch (error) {
-    console.error('Erreur lors de la suppression du lien:', error);
   }
 };
 
@@ -147,7 +142,6 @@ export const getAllShareLinks = (): ShareLink[] => {
     const shareLinks: Record<string, ShareLink> = JSON.parse(links);
     return Object.values(shareLinks);
   } catch (error) {
-    console.error('Erreur lors de la récupération des liens:', error);
     return [];
   }
 };
@@ -157,7 +151,6 @@ export const getShareLinkByFileId = (fileId: string): ShareLink | null => {
     const allLinks = getAllShareLinks();
     return allLinks.find(link => link.fichierId === fileId) || null;
   } catch (error) {
-    console.error('Erreur lors de la récupération du lien par fichier:', error);
     return null;
   }
 };
@@ -170,7 +163,6 @@ export const saveCompanyShare = (share: CompanyShare): void => {
     companyShares[share.id] = share;
     localStorage.setItem(COMPANY_SHARES_KEY, JSON.stringify(companyShares));
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde du partage avec la boîte:', error);
   }
 };
 
@@ -181,7 +173,6 @@ export const getAllCompanyShares = (): CompanyShare[] => {
     const companyShares: Record<string, CompanyShare> = JSON.parse(shares);
     return Object.values(companyShares).filter(share => share.actif);
   } catch (error) {
-    console.error('Erreur lors de la récupération des partages avec la boîte:', error);
     return [];
   }
 };
@@ -191,7 +182,6 @@ export const getCompanyShareByFileId = (fileId: string): CompanyShare | null => 
     const allShares = getAllCompanyShares();
     return allShares.find(share => share.fichierId === fileId) || null;
   } catch (error) {
-    console.error('Erreur lors de la récupération du partage par fichier:', error);
     return null;
   }
 };
@@ -204,7 +194,6 @@ export const deleteCompanyShare = (shareId: string): void => {
     delete companyShares[shareId];
     localStorage.setItem(COMPANY_SHARES_KEY, JSON.stringify(companyShares));
   } catch (error) {
-    console.error('Erreur lors de la suppression du partage:', error);
   }
 };
 

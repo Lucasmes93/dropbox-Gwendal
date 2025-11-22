@@ -31,7 +31,6 @@ export const TagModal = ({ item, onClose, onSave }) => {
         setAvailableTags(['Important', 'Travail', 'Personnel', 'Archive', 'Urgent']);
       }
     } catch (error) {
-      console.error('Erreur lors du chargement des tags:', error);
       setAvailableTags(['Important', 'Travail', 'Personnel', 'Archive', 'Urgent']);
     }
   };

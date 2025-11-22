@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { 
-  selectSyncFolder, 
+  selectMainFolder,
+  selectSubFolder,
+  listSubFolders,
   syncBidirectional, 
   startAutoSync, 
   stopAutoSync, 
   getSyncStatus,
   resetSync,
+  getSyncPath,
   isFileSystemAccessSupported 
 } from '../../services/folderSync';
 import './Settings.scss';
@@ -18,9 +21,19 @@ export const Settings = () => {
   const [syncProgress, setSyncProgress] = useState(null);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [syncInterval, setSyncInterval] = useState(30); // en secondes
+  const [mainFolderHandle, setMainFolderHandle] = useState(null);
+  const [subFolders, setSubFolders] = useState([]);
+  const [selectedSubFolder, setSelectedSubFolder] = useState(null);
+  const [isLoadingSubFolders, setIsLoadingSubFolders] = useState(false);
 
   useEffect(() => {
     loadSyncStatus();
+    
+    // Charger le sous-dossier sélectionné depuis localStorage
+    const savedSubFolder = localStorage.getItem('monDrive_syncSubFolderPath');
+    if (savedSubFolder) {
+      setSelectedSubFolder(savedSubFolder);
+    }
     
     // Écouter les événements de synchronisation arrêtée
     const handleSyncStopped = (e) => {
@@ -48,7 +61,7 @@ export const Settings = () => {
     setAutoSyncEnabled(status.isActive);
   };
 
-  const handleSelectFolder = async () => {
+  const handleSelectMainFolder = async () => {
     if (!isFileSystemAccessSupported()) {
       alert('Cette fonctionnalité nécessite Chrome, Edge ou Opera. L\'API File System Access n\'est pas supportée par votre navigateur.');
       return;
@@ -56,40 +69,50 @@ export const Settings = () => {
 
     setIsSelecting(true);
     try {
-      const result = await selectSyncFolder();
+      const result = await selectMainFolder();
       if (result.success) {
-        // Après sélection du dossier, proposer une synchronisation immédiate
-        const shouldSync = confirm(
-          `Dossier sélectionné : ${result.folderName}\n\n` +
-          `Voulez-vous synchroniser maintenant ?\n` +
-          `(Cela copiera tous les fichiers du dossier vers l'application)`
-        );
+        setMainFolderHandle(result.handle);
         
-        if (shouldSync) {
-          setIsSyncing(true);
-          setSyncProgress({ total: 0, current: 0, status: 'Démarrage de la synchronisation...' });
+        // Charger la liste des sous-dossiers
+        setIsLoadingSubFolders(true);
+        try {
+          const folders = await listSubFolders(result.handle);
+          setSubFolders(folders);
           
-          try {
-            const syncResult = await syncBidirectional((progress) => {
-              setSyncProgress(progress);
-            });
+          if (folders.length > 0) {
+            const subFolderChoice = confirm(
+              `Dossier principal sélectionné : ${result.folderName}\n\n` +
+              `Voulez-vous synchroniser un sous-dossier spécifique ?\n\n` +
+              `Sous-dossiers disponibles :\n${folders.slice(0, 10).map(f => `- ${f}`).join('\n')}${folders.length > 10 ? `\n... et ${folders.length - 10} autres` : ''}\n\n` +
+              `Cliquez sur "OK" pour choisir un sous-dossier, ou "Annuler" pour synchroniser tout le dossier principal.`
+            );
             
-            if (syncResult.success) {
-              alert(
-                `Synchronisation terminée !\n\n` +
-                `✓ ${syncResult.fromLocal.syncedCount} fichiers importés depuis le dossier local\n` +
-                `✓ ${syncResult.toLocal.syncedCount} fichiers synchronisés vers le dossier local\n\n` +
-                `Tous les fichiers sont maintenant disponibles dans l'application.`
+            if (subFolderChoice) {
+              // Afficher un prompt pour choisir le sous-dossier
+              const subFolderName = prompt(
+                `Entrez le nom du sous-dossier à synchroniser :\n\n` +
+                `Sous-dossiers disponibles :\n${folders.map(f => `- ${f}`).join('\n')}`
               );
-            } else {
-              alert(`Erreur lors de la synchronisation : ${syncResult.error}`);
+              
+              if (subFolderName && folders.includes(subFolderName)) {
+                const subResult = await selectSubFolder(result.handle, subFolderName);
+                if (subResult.success) {
+                  setSelectedSubFolder(subFolderName);
+                  alert(`Sous-dossier sélectionné : ${subFolderName}\n\nLa synchronisation se fera uniquement dans ce dossier.`);
+                } else {
+                  alert(`Erreur : ${subResult.error}`);
+                }
+              } else if (subFolderName) {
+                alert(`Le sous-dossier "${subFolderName}" n'existe pas dans le dossier principal.`);
+              }
             }
-          } catch (syncError) {
-            alert(`Erreur lors de la synchronisation : ${syncError.message}`);
-          } finally {
-            setIsSyncing(false);
-            setSyncProgress(null);
+          } else {
+            alert(`Dossier principal sélectionné : ${result.folderName}\n\nAucun sous-dossier trouvé. La synchronisation se fera sur tout le dossier principal.`);
           }
+        } catch (error) {
+          alert(`Erreur lors du chargement des sous-dossiers : ${error.message}`);
+        } finally {
+          setIsLoadingSubFolders(false);
         }
         
         loadSyncStatus();
@@ -179,9 +202,11 @@ export const Settings = () => {
             <br /><br />
             <strong>Comment ça fonctionne :</strong>
             <ol style={{ marginLeft: '1.5rem', marginTop: '0.5rem' }}>
-              <li>L'entreprise dépose ses fichiers dans un dossier sur votre ordinateur (ex: C:\Entreprise\Documents)</li>
-              <li>Vous sélectionnez ce dossier dans l'application</li>
-              <li>La synchronisation copie automatiquement tous les fichiers du dossier vers l'application</li>
+              <li><strong>Étape 1 :</strong> L'entreprise dépose ses fichiers dans un dossier principal sur votre ordinateur (ex: C:\Entreprise\Documents)</li>
+              <li><strong>Étape 2 :</strong> Vous sélectionnez ce dossier principal dans l'application</li>
+              <li><strong>Étape 3 :</strong> Vous choisissez un sous-dossier spécifique à synchroniser (ex: "ProjetX") - optionnel, vous pouvez synchroniser tout le dossier principal</li>
+              <li><strong>Étape 4 :</strong> Activez la synchronisation automatique</li>
+              <li><strong>Résultat :</strong> Tous les fichiers du dossier/sous-dossier sélectionné sont automatiquement synchronisés avec l'application toutes les X secondes</li>
               <li>Les modifications dans l'application sont aussi synchronisées vers le dossier local</li>
             </ol>
             <br />
@@ -198,21 +223,71 @@ export const Settings = () => {
           <div className="sync-controls">
             <div className="sync-folder-selection">
               <h3>Dossier de synchronisation</h3>
+              <p className="settings-description" style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>
+                <strong>Étape 1 :</strong> Sélectionnez le dossier principal de l'entreprise (ex: C:\Entreprise\Documents)
+                <br />
+                <strong>Étape 2 :</strong> Choisissez un sous-dossier spécifique à synchroniser (optionnel)
+                <br />
+                <strong>Étape 3 :</strong> Activez la synchronisation automatique
+              </p>
+              
               {syncStatus?.hasFolder ? (
                 <div className="sync-folder-info">
-                  <span>✓ Dossier sélectionné</span>
-                  {syncStatus.syncPath && <span className="sync-path">{syncStatus.syncPath}</span>}
+                  <span>✓ Dossier principal sélectionné</span>
+                  {syncStatus.syncPath && (
+                    <span className="sync-path">
+                      {getSyncPath() || syncStatus.syncPath}
+                      {selectedSubFolder && ` (sous-dossier: ${selectedSubFolder})`}
+                    </span>
+                  )}
                 </div>
               ) : (
                 <p className="sync-no-folder">Aucun dossier sélectionné</p>
               )}
+              
               <button 
-                onClick={handleSelectFolder} 
-                disabled={isSelecting || !isFileSystemAccessSupported()}
+                onClick={handleSelectMainFolder} 
+                disabled={isSelecting || isLoadingSubFolders || !isFileSystemAccessSupported()}
                 className="btn-primary"
               >
-                {isSelecting ? 'Sélection en cours...' : 'Sélectionner un dossier'}
+                {isSelecting ? 'Sélection en cours...' : isLoadingSubFolders ? 'Chargement des sous-dossiers...' : 'Sélectionner le dossier principal'}
               </button>
+              
+              {subFolders.length > 0 && mainFolderHandle && (
+                <div className="sync-subfolder-selection" style={{ marginTop: '1rem', padding: '1rem', background: '#f5f5f5', borderRadius: '4px' }}>
+                  <h4>Sous-dossiers disponibles :</h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    {subFolders.map(folder => (
+                      <button
+                        key={folder}
+                        onClick={async () => {
+                          const result = await selectSubFolder(mainFolderHandle, folder);
+                          if (result.success) {
+                            setSelectedSubFolder(folder);
+                            alert(`Sous-dossier sélectionné : ${folder}\n\nLa synchronisation se fera uniquement dans ce dossier.`);
+                            loadSyncStatus();
+                          } else {
+                            alert(`Erreur : ${result.error}`);
+                          }
+                        }}
+                        className={`btn-secondary ${selectedSubFolder === folder ? 'active' : ''}`}
+                        style={{ 
+                          fontSize: '0.875rem',
+                          padding: '0.5rem 1rem',
+                          ...(selectedSubFolder === folder && { background: '#2196f3', color: 'white' })
+                        }}
+                      >
+                        {folder}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedSubFolder && (
+                    <p style={{ marginTop: '0.5rem', color: '#4caf50', fontWeight: 'bold' }}>
+                      ✓ Synchronisation active sur : {selectedSubFolder}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="sync-actions">

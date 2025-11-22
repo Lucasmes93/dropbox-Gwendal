@@ -1,115 +1,109 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { NoteEditor } from '../../components/NoteEditor/NoteEditor';
+import { useAuth } from '../../context/AuthContext';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
+import api from '../../services/api';
 import './Notes.scss';
 
 export const Notes = () => {
+  const { user } = useAuth();
   const [notes, setNotes] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadNotes();
 
-    // Écouter les événements de synchronisation automatique
-    const handleDataSynced = (e) => {
-      const customEvent = e;
-      if (customEvent.detail?.key === 'monDrive_notes') {
-        try {
-          const updated = customEvent.detail.value;
-          setNotes(updated);
-          // Si la note sélectionnée existe toujours, la mettre à jour
-          if (selectedNote) {
-            const updatedNote = updated.find(n => n.id === selectedNote.id);
-            if (updatedNote) {
-              setSelectedNote(updatedNote);
-            }
-          }
-        } catch (error) {
-          console.error('Erreur lors de la synchronisation des notes:', error);
-        }
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
+    }
+
+    // S'abonner aux événements WebSocket
+    const unsubscribeNoteCreated = onWebSocketEvent('note_created', () => {
+      loadNotes();
+    });
+    const unsubscribeNoteUpdated = onWebSocketEvent('note_updated', () => {
+      loadNotes();
+    });
+    const unsubscribeNoteDeleted = onWebSocketEvent('note_deleted', () => {
+      loadNotes();
+    });
+
+    // Recharger toutes les 10 secondes en fallback
+    const interval = setInterval(loadNotes, 10000);
+
+    return () => {
+      clearInterval(interval);
+      unsubscribeNoteCreated();
+      unsubscribeNoteUpdated();
+      unsubscribeNoteDeleted();
+      if (user?.id) {
+        disconnectWebSocket();
       }
     };
+  }, [user]);
 
-    window.addEventListener('dataSynced', handleDataSynced);
-    
-    return () => {
-      window.removeEventListener('dataSynced', handleDataSynced);
-    };
-  }, []); // Charger une seule fois au montage
-
-  const loadNotes = () => {
+  const loadNotes = async () => {
     try {
-      const saved = localStorage.getItem('monDrive_notes');
-      if (saved) {
-        const loadedNotes = JSON.parse(saved);
-        setNotes(loadedNotes);
-        if (loadedNotes.length > 0 && !selectedNote) {
+      setLoading(true);
+      const loadedNotes = await api.getNotes();
+      setNotes(loadedNotes);
+      if (loadedNotes.length > 0 && !selectedNote) {
+        setSelectedNote(loadedNotes[0]);
+      } else if (selectedNote) {
+        const updatedNote = loadedNotes.find(n => n.id === selectedNote.id);
+        if (updatedNote) {
+          setSelectedNote(updatedNote);
+        } else if (loadedNotes.length > 0) {
           setSelectedNote(loadedNotes[0]);
+        } else {
+          setSelectedNote(null);
         }
-      } else {
-        // Exemples de notes
-        const exampleNotes = [
-          {
-            id: '1',
-            titre: 'Réunion équipe - Notes',
-            contenu: 'Points abordés :\n- Projet X : avancement à 75%\n- Nouvelle fonctionnalité à développer\n- Deadline : fin du mois\n\nActions :\n- [ ] Préparer la présentation\n- [ ] Contacter le client',
-            dateCreation: new Date(Date.now() - 86400000).toISOString(),
-            dateModification: new Date(Date.now() - 3600000).toISOString(),
-          },
-          {
-            id: '2',
-            titre: 'Idées pour améliorer le produit',
-            contenu: 'Liste d\'idées :\n1. Améliorer l\'interface utilisateur\n2. Ajouter des raccourcis clavier\n3. Optimiser les performances\n4. Ajouter le mode sombre',
-            dateCreation: new Date(Date.now() - 172800000).toISOString(),
-            dateModification: new Date(Date.now() - 172800000).toISOString(),
-          },
-          {
-            id: '3',
-            titre: 'Recette gâteau au chocolat',
-            contenu: 'Ingrédients :\n- 200g de chocolat\n- 150g de beurre\n- 3 œufs\n- 100g de sucre\n\nPréparation :\n1. Faire fondre le chocolat...',
-            dateCreation: new Date(Date.now() - 259200000).toISOString(),
-            dateModification: new Date(Date.now() - 259200000).toISOString(),
-          },
-        ];
-        setNotes(exampleNotes);
-        setSelectedNote(exampleNotes[0]);
-        localStorage.setItem('monDrive_notes', JSON.stringify(exampleNotes));
       }
     } catch (error) {
-      console.error('Erreur:', error);
+      setNotes([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const saveNotes = (newNotes) => {
-    localStorage.setItem('monDrive_notes', JSON.stringify(newNotes));
-    setNotes(newNotes);
+  const handleCreateNote = async () => {
+    try {
+      const newNote = await api.createNote({
+        titre: 'Nouvelle note',
+        contenu: '',
+      });
+      await loadNotes();
+      setSelectedNote(newNote);
+    } catch (error) {
+      alert('Erreur lors de la création: ' + (error?.message || 'Erreur serveur'));
+    }
   };
 
-  const handleCreateNote = () => {
-    const newNote = {
-      id: Date.now().toString(),
-      titre: 'Nouvelle note',
-      contenu: '',
-      dateCreation: new Date().toISOString(),
-      dateModification: new Date().toISOString(),
-    };
-    const updated = [newNote, ...notes];
-    saveNotes(updated);
-    setSelectedNote(newNote);
+  const handleSaveNote = async (note) => {
+    try {
+      await api.updateNote(note.id, {
+        titre: note.titre,
+        contenu: note.contenu,
+      });
+      await loadNotes();
+    } catch (error) {
+      alert('Erreur lors de la sauvegarde: ' + (error?.message || 'Erreur serveur'));
+    }
   };
 
-  const handleSaveNote = (note) => {
-    const updated = notes.map(n => n.id === note.id ? note : n);
-    saveNotes(updated);
-    setSelectedNote(note);
-  };
-
-  const handleDeleteNote = (noteId) => {
-    const updated = notes.filter(n => n.id !== noteId);
-    saveNotes(updated);
-    if (selectedNote?.id === noteId) {
-      setSelectedNote(updated.length > 0 ? updated[0] : null);
+  const handleDeleteNote = async (noteId) => {
+    try {
+      await api.deleteNote(noteId);
+      await loadNotes();
+      if (selectedNote?.id === noteId) {
+        setSelectedNote(null);
+      }
+    } catch (error) {
+      alert('Erreur lors de la suppression: ' + (error?.message || 'Erreur serveur'));
     }
   };
 

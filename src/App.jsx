@@ -24,6 +24,7 @@ import { FileEditor } from './pages/FileEditor/FileEditor';
 import { Trash } from './pages/Trash/Trash';
 import { Profile } from './pages/Profile/Profile';
 import { PublicShare } from './pages/PublicShare/PublicShare';
+import { Admin } from './pages/Admin/Admin';
 import { NotFound } from './pages/NotFound/NotFound';
 
 function AppRoutes() {
@@ -184,6 +185,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <Admin />
               </ProtectedRoute>
             }
           />

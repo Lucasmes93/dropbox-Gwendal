@@ -1,51 +1,84 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
+import api from '../../services/api';
 import './Notifications.scss';
 
 export const Notifications = ({ onClose }) => {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     loadNotifications();
-    const handleUpdate = () => loadNotifications();
-    window.addEventListener('notificationUpdated', handleUpdate);
-    return () => window.removeEventListener('notificationUpdated', handleUpdate);
-  }, []);
+    
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
+    }
 
-  const loadNotifications = () => {
-    try {
-      const saved = localStorage.getItem('monDrive_notifications');
-      if (saved) {
-        const loaded = JSON.parse(saved);
-        setNotifications(loaded.sort((a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        ));
+    // S'abonner aux événements WebSocket
+    const unsubscribeNotificationCreated = onWebSocketEvent('notification_created', (data) => {
+      if (data.notification.userId === user?.id) {
+        loadNotifications();
       }
+    });
+    const unsubscribeNotificationUpdated = onWebSocketEvent('notification_updated', (data) => {
+      if (data.notification.userId === user?.id) {
+        loadNotifications();
+      }
+    });
+    const unsubscribeNotificationDeleted = onWebSocketEvent('notification_deleted', () => {
+      loadNotifications();
+    });
+
+    // Recharger toutes les 10 secondes en fallback
+    const interval = setInterval(loadNotifications, 10000);
+    
+    return () => {
+      clearInterval(interval);
+      unsubscribeNotificationCreated();
+      unsubscribeNotificationUpdated();
+      unsubscribeNotificationDeleted();
+      if (user?.id) {
+        disconnectWebSocket();
+      }
+    };
+  }, [user]);
+
+  const loadNotifications = async () => {
+    try {
+      const apiNotifications = await api.getNotifications();
+      setNotifications(apiNotifications.sort((a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      ));
     } catch (error) {
-      console.error('Erreur:', error);
+      setNotifications([]);
     }
   };
 
-  const markAsRead = (id) => {
-    const updated = notifications.map(n =>
-      n.id === id ? { ...n, lu: true } : n
-    );
-    localStorage.setItem('monDrive_notifications', JSON.stringify(updated));
-    setNotifications(updated);
-    window.dispatchEvent(new Event('notificationUpdated'));
+  const markAsRead = async (id) => {
+    try {
+      await api.markNotificationAsRead(id);
+      await loadNotifications();
+    } catch (error) {
+    }
   };
 
-  const markAllAsRead = () => {
-    const updated = notifications.map(n => ({ ...n, lu: true }));
-    localStorage.setItem('monDrive_notifications', JSON.stringify(updated));
-    setNotifications(updated);
-    window.dispatchEvent(new Event('notificationUpdated'));
+  const markAllAsRead = async () => {
+    try {
+      const unreadNotifications = notifications.filter(n => !n.lu);
+      await Promise.all(unreadNotifications.map(n => api.markNotificationAsRead(n.id)));
+      await loadNotifications();
+    } catch (error) {
+    }
   };
 
-  const deleteNotification = (id) => {
-    const updated = notifications.filter(n => n.id !== id);
-    localStorage.setItem('monDrive_notifications', JSON.stringify(updated));
-    setNotifications(updated);
-    window.dispatchEvent(new Event('notificationUpdated'));
+  const deleteNotification = async (id) => {
+    try {
+      await api.deleteNotification(id);
+      await loadNotifications();
+    } catch (error) {
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.lu).length;
@@ -85,6 +118,11 @@ export const Notifications = ({ onClose }) => {
               <div className="notification-content">
                 <div className="notification-title">{notif.titre}</div>
                 <div className="notification-message">{notif.message}</div>
+                {notif.errorCause && (
+                  <div className="notification-error-cause">
+                    <strong>Cause de l'échec :</strong> {notif.errorCause}
+                  </div>
+                )}
                 <div className="notification-time">
                   {new Date(notif.timestamp).toLocaleString('fr-FR')}
                 </div>

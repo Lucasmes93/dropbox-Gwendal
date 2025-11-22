@@ -10,10 +10,18 @@ import { RenameModal } from '../../components/RenameModal/RenameModal';
 import { ShareModal } from '../../components/ShareModal/ShareModal';
 import { TagModal } from '../../components/TagModal/TagModal';
 import { saveFileContent, getFileContent, deleteFileContent, base64ToBlob } from '../../services/storage';
+import { useAuth } from '../../context/AuthContext';
+import { logActivity } from '../../services/activityLog';
+import { notifySuccess, notifyError } from '../../services/notifications';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
+import { openFileWithNativeApp } from '../../services/fileSync';
+import { createWordDocument, createExcelSpreadsheet, createPowerPointPresentation } from '../../utils/officeFileGenerator';
+import api from '../../services/api';
 import './Files.scss';
 
 export const Files = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [files, setFiles] = useState([]);
   const [currentPath, setCurrentPath] = useState([{ nom: 'Mes fichiers' }]);
   const [currentFolderId, setCurrentFolderId] = useState(undefined);
@@ -28,179 +36,104 @@ export const Files = () => {
   const [contextMenu, setContextMenu] = useState(null);
   const createButtonRef = useRef(null);
 
-  // Données mock initiales
-  const getInitialFiles = ()=> [
-    // Racine
-    {
-      id: '1',
-      nom: 'Documents',
-      type: 'dossier',
-      dateModification: '2025-11-15',
-      parentId: undefined,
-    },
-    {
-      id: '2',
-      nom: 'Images',
-      type: 'dossier',
-      dateModification: '2025-11-18',
-      parentId: undefined,
-    },
-    {
-      id: '3',
-      nom: 'rapport.pdf',
-      type: 'fichier',
-      taille: 2048576,
-      extension: 'pdf',
-      dateModification: '2025-11-19',
-      parentId: undefined,
-    },
-    {
-      id: '4',
-      nom: 'presentation.pptx',
-      type: 'fichier',
-      taille: 5242880,
-      extension: 'pptx',
-      dateModification: '2025-11-20',
-      parentId: undefined,
-    },
-    // Contenu du dossier Documents (id: '1')
-    {
-      id: '5',
-      nom: 'Travail',
-      type: 'dossier',
-      dateModification: '2025-11-16',
-      parentId: '1',
-    },
-    {
-      id: '6',
-      nom: 'Personnel',
-      type: 'dossier',
-      dateModification: '2025-11-17',
-      parentId: '1',
-    },
-    {
-      id: '7',
-      nom: 'note.txt',
-      type: 'fichier',
-      taille: 1024,
-      extension: 'txt',
-      dateModification: '2025-11-18',
-      parentId: '1',
-    },
-    // Contenu du dossier Images (id: '2')
-    {
-      id: '8',
-      nom: 'photo1.jpg',
-      type: 'fichier',
-      taille: 3145728,
-      extension: 'jpg',
-      dateModification: '2025-11-19',
-      parentId: '2',
-    },
-    {
-      id: '9',
-      nom: 'photo2.png',
-      type: 'fichier',
-      taille: 2097152,
-      extension: 'png',
-      dateModification: '2025-11-20',
-      parentId: '2',
-    },
-    // Contenu du dossier Travail (id: '5')
-    {
-      id: '10',
-      nom: 'projet.docx',
-      type: 'fichier',
-      taille: 1536000,
-      extension: 'docx',
-      dateModification: '2025-11-21',
-      parentId: '5',
-    },
-  ];
+  // Charger depuis l'API
+  const [allFiles, setAllFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Charger depuis localStorage ou utiliser les données initiales
-  const [allFiles, setAllFiles] = useState(() => {
-    try {
-      const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement depuis localStorage:', error);
+  // Charger les fichiers depuis l'API au montage
+  useEffect(() => {
+    loadFiles();
+    
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
     }
-    return getInitialFiles();
-  });
 
-  // Sauvegarder dans localStorage à chaque modification (avec debounce pour éviter les sauvegardes trop fréquentes)
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      try {
-        const serialized = JSON.stringify(allFiles);
-        // Vérifier la taille pour éviter les problèmes de quota
-        if (serialized.length > 5 * 1024 * 1024) { // 5MB
-          console.warn('Les fichiers sont très volumineux, cela peut causer des problèmes de performance');
-        }
-        const currentSaved = localStorage.getItem('monDrive_files');
-        // Ne sauvegarder que si les données ont changé
-        if (serialized !== currentSaved) {
-          localStorage.setItem('monDrive_files', serialized);
-          // Déclencher un événement personnalisé pour notifier les autres composants
-          window.dispatchEvent(new Event('filesUpdated'));
-        }
-      } catch (error) {
-        console.error('Erreur lors de la sauvegarde dans localStorage:', error);
-        // Si c'est une erreur de quota, informer l'utilisateur
-        if (error.name === 'QuotaExceededError') {
-          alert('L\'espace de stockage est plein. Veuillez supprimer des fichiers.');
-        }
-      }
-    }, 300); // Debounce de 300ms pour éviter les sauvegardes trop fréquentes
+    // S'abonner aux événements WebSocket
+    const unsubscribeFileCreated = onWebSocketEvent('file_created', () => {
+      loadFiles();
+    });
+    const unsubscribeFolderCreated = onWebSocketEvent('folder_created', () => {
+      loadFiles();
+    });
+    const unsubscribeFileDeleted = onWebSocketEvent('file_deleted', () => {
+      loadFiles();
+    });
+    const unsubscribeFileRenamed = onWebSocketEvent('file_renamed', () => {
+      loadFiles();
+    });
+    const unsubscribeFileUpdated = onWebSocketEvent('file_updated', () => {
+      loadFiles();
+    });
+    const unsubscribeFileMoved = onWebSocketEvent('file_moved', () => {
+      loadFiles();
+    });
+    const unsubscribeFileRestored = onWebSocketEvent('file_restored', () => {
+      loadFiles();
+    });
 
-    return () => clearTimeout(timeoutId);
-  }, [allFiles]);
+    // Recharger toutes les 10 secondes en fallback
+    const interval = setInterval(() => {
+      loadFiles();
+    }, 10000);
 
-  // Écouter les mises à jour depuis d'autres pages (comme la corbeille) et la synchronisation automatique
-  useEffect(() => {
-    const handleFilesUpdate = () => {
-      try {
-        const saved = localStorage.getItem('monDrive_files');
-        if (saved) {
-          const updated = JSON.parse(saved);
-          setAllFiles(updated);
-        }
-      } catch (error) {
-        console.error('Erreur lors du rechargement des fichiers:', error);
+    return () => {
+      clearInterval(interval);
+      unsubscribeFileCreated();
+      unsubscribeFolderCreated();
+      unsubscribeFileDeleted();
+      unsubscribeFileRenamed();
+      unsubscribeFileUpdated();
+      unsubscribeFileMoved();
+      unsubscribeFileRestored();
+      if (user?.id) {
+        disconnectWebSocket();
       }
     };
+  }, [user]);
 
-    // Écouter les événements de synchronisation automatique
-    const handleDataSynced = (e) => {
-      const customEvent = e;
-      if (customEvent.detail?.key === 'monDrive_files') {
-        try {
-          const updated = customEvent.detail.value;
-          setAllFiles(updated);
-        } catch (error) {
-          console.error('Erreur lors de la synchronisation des fichiers:', error);
-        }
-      }
+  const loadFiles = async () => {
+    try {
+      setLoading(true);
+      const files = await api.getFiles();
+      setAllFiles(files || []);
+    } catch (error) {
+      notifyError(
+        'Erreur de chargement',
+        'Impossible de charger les fichiers',
+        error?.message || 'Erreur serveur',
+        'load_files'
+      );
+      setAllFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Écouter les événements de mise à jour pour recharger depuis l'API
+  useEffect(() => {
+    const handleFilesUpdate = () => {
+      loadFiles();
     };
 
     window.addEventListener('filesUpdated', handleFilesUpdate);
-    window.addEventListener('dataSynced', handleDataSynced);
     
     return () => {
       window.removeEventListener('filesUpdated', handleFilesUpdate);
-      window.removeEventListener('dataSynced', handleDataSynced);
     };
-  }, []); // Charger une seule fois au montage
+  }, []);
 
   useEffect(() => {
-    // Filtrer les fichiers selon le dossier courant
+    // Filtrer les fichiers selon le dossier courant et exclure les fichiers supprimés
     const filtered = allFiles.filter(file => {
+      // Exclure les fichiers supprimés
+      if (file.estSupprime) {
+        return false;
+      }
+      
       // Si on est à la racine (currentFolderId === undefined), montrer les fichiers sans parentId
       if (currentFolderId === undefined) {
-        return file.parentId === undefined;
+        return file.parentId === null || file.parentId === undefined;
       }
       // Sinon, montrer les fichiers dont le parentId correspond au dossier courant
       return file.parentId === currentFolderId;
@@ -250,60 +183,54 @@ export const Files = () => {
     }
   };
 
-  const handleDelete = (item) => {
-    // Marquer comme supprimé au lieu de supprimer définitivement
-    setAllFiles(prev => prev.map(f =>
-      f.id === item.id ? { ...f, estSupprime: true } : f
-    ));
-    // Notene supprime pas le contenu du fichier pour permettre la restauration
-    setContextMenu(null);
+  const handleDelete = async (item) => {
+    // Validation de suppression selon le cahier des charges
+    const confirmMessage = `Êtes-vous sûr de vouloir supprimer "${item.nom}" ?\n\n` +
+      `Le fichier sera déplacé dans la corbeille et restera disponible pendant 1 mois.`;
+    
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      // Supprimer via l'API
+      await api.deleteFile(item.id);
+
+      // Recharger les fichiers
+      await loadFiles();
+
+      // Le log d'activité est créé automatiquement par le backend
+
+      // Notification de succès
+      notifySuccess(
+        'Fichier supprimé',
+        `"${item.nom}" a été déplacé dans la corbeille`,
+        'delete'
+      );
+
+      setContextMenu(null);
+    } catch (error) {
+      // Notification d'erreur avec cause
+      notifyError(
+        'Erreur de suppression',
+        `Impossible de supprimer "${item.nom}"`,
+        error?.message || 'Erreur serveur',
+        'delete'
+      );
+    }
   };
 
-  const downloadFile = (item, openInApp = false) => {
-    // Récupérer le contenu réel du fichier
-    const fileContent = getFileContent(item.id);
-    
-    if (fileContent) {
-      // Utiliser le contenu stocké
-      const blob = base64ToBlob(fileContent, item.mimeType);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = item.nom;
-      
-      // Pour les fichiers Office, essayer d'ouvrir avec l'application système
-      if (openInApp) {
-        // Créer un lien avec target="_blank" pour certains navigateurs
-        link.target = '_blank';
-        // Certains navigateurs ouvrent automatiquement les fichiers Office téléchargés
-        // avec l'application associée si elle est configurée
-      }
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      // Nettoyer l'URL après un court délai pour permettre le téléchargement
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, 100);
-    } else {
-      // Fichier mock ou ancien fichier sans contenu stocké
-      const content = `Contenu du fichier ${item.nom}\n\nCeci est un fichier de démonstration.`;
-      const blob = new Blob([content], { type: item.mimeType || 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = item.nom;
-      if (openInApp) {
-        link.target = '_blank';
-      }
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, 100);
+  const downloadFile = async (item, openInApp = false) => {
+    try {
+      // Télécharger via l'API
+      await api.downloadFile(item.id, item.nom);
+    } catch (error) {
+      notifyError(
+        'Erreur de téléchargement',
+        `Impossible de télécharger "${item.nom}"`,
+        error?.message || 'Erreur serveur',
+        'download'
+      );
     }
   };
 
@@ -342,8 +269,8 @@ export const Files = () => {
         const blob = base64ToBlob(fileContent, file.mimeType);
         zip.file(path, blob);
       } else {
-        // Fichier mock ou ancien fichier sans contenu
-        const content = `Contenu du fichier ${file.nom}\n\nCeci est un fichier de démonstration.`;
+        // Fichier sans contenu stocké
+        const content = `Contenu du fichier ${file.nom}`;
         zip.file(path, content);
       }
     }
@@ -360,7 +287,6 @@ export const Files = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Erreur lors de la création du ZIP:', error);
       alert('Erreur lors du téléchargement du dossier');
     }
   };
@@ -374,9 +300,8 @@ export const Files = () => {
     setContextMenu(null);
   };
 
-  const handleCreateOfficeFile = (type) => {
+  const handleCreateOfficeFile = async (type) => {
     if (!type) {
-      console.error('Type de fichier non spécifié');
       return;
     }
 
@@ -401,48 +326,63 @@ export const Files = () => {
       text: 'Nouveau fichier texte.txt',
     };
 
-    const defaultContent = {
-      word: 'Document Word créé avec MonDrive',
-      excel: 'Feuille de calcul Excel créée avec MonDrive',
-      powerpoint: 'Présentation PowerPoint créée avec MonDrive',
-      text: 'Fichier texte créé avec MonDrive',
-    };
-
     // Vérifier que le type est valide
-    if (!extensions[type] || !mimeTypes[type] || !defaultNames[type] || !defaultContent[type]) {
-      console.error('Type de fichier invalide:', type);
+    if (!extensions[type] || !mimeTypes[type] || !defaultNames[type]) {
       return;
     }
 
-    const fileId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
-    const newFile = {
-      id: fileId,
-      nom: defaultNames[type],
-      type: 'fichier',
-      taille: defaultContent[type].length,
-      dateModification: new Date().toISOString(),
-      extension: extensions[type],
-      parentId: currentFolderId,
-      mimeType: mimeTypes[type],
-      estSupprime: false,
-    };
+    try {
+      let file;
+      
+      // Créer un fichier Office valide ou un fichier texte
+      if (type === 'word') {
+        const blob = await createWordDocument('Document Word créé avec MonDrive');
+        file = new File([blob], defaultNames[type], { type: mimeTypes[type] });
+      } else if (type === 'excel') {
+        const blob = await createExcelSpreadsheet();
+        file = new File([blob], defaultNames[type], { type: mimeTypes[type] });
+      } else if (type === 'powerpoint') {
+        const blob = await createPowerPointPresentation();
+        file = new File([blob], defaultNames[type], { type: mimeTypes[type] });
+      } else if (type === 'text') {
+        // Pour les fichiers texte, créer un simple blob
+        const blob = new Blob(['Fichier texte créé avec MonDrive'], { type: mimeTypes[type] });
+        file = new File([blob], defaultNames[type], { type: mimeTypes[type] });
+      } else {
+        throw new Error('Type de fichier non supporté');
+      }
+      
+      // Upload via l'API avec un flag pour indiquer que c'est une création (pas un téléversement)
+      const newFile = await api.uploadFile(file, currentFolderId, true); // true = isCreation
 
-    // Créer un blob et le sauvegarder
-    const blob = new Blob([defaultContent[type]], { type: mimeTypes[type] });
-    const file = new File([blob], defaultNames[type], { type: mimeTypes[type] });
-    
-    // Ajouter le fichier immédiatement pour qu'il soit visible
-    setAllFiles(prev => {
-      const updated = [...prev, newFile];
-      return updated;
-    });
-    
-    // Sauvegarder le contenu en arrière-plan
-    saveFileContent(fileId, file).then(() => {
-      console.log('Fichier créé et sauvegardé:', newFile.nom);
-    }).catch(error => {
-      console.error('Erreur lors de la sauvegarde du contenu:', error);
-    });
+      // Recharger les fichiers
+      await loadFiles();
+
+      // Le log d'activité est créé automatiquement par le backend
+
+      notifySuccess(
+        'Fichier créé',
+        `"${defaultNames[type]}" a été créé avec succès`,
+        'file_creation'
+      );
+
+      // Ouvrir automatiquement le fichier avec l'application native
+      try {
+        // Attendre un peu pour que le fichier soit bien créé
+        setTimeout(async () => {
+          await openFileWithNativeApp(newFile.id, defaultNames[type]);
+        }, 500);
+      } catch (error) {
+        // Ne pas bloquer si l'ouverture échoue
+      }
+    } catch (error) {
+      notifyError(
+        'Erreur de création',
+        `Impossible de créer le fichier`,
+        error?.message || 'Erreur serveur',
+        'file_creation'
+      );
+    }
   };
 
   const filteredFiles = files.filter(file =>
@@ -497,6 +437,13 @@ export const Files = () => {
           ))}
         </div>
 
+        {loading && (
+          <div className="loading-state">
+            <p>Chargement des fichiers...</p>
+          </div>
+        )}
+
+        {!loading && (
         <div className="files-table-container">
           <table className="files-table">
             <thead>
@@ -509,44 +456,52 @@ export const Files = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredFiles.map((file) => (
-                <tr key={file.id}>
-                  <td 
-                    onClick={() => handleFileClick(file)} 
-                    className={`file-name ${file.type === 'fichier' ? 'file-clickable' : ''}`}
-                  >
-                    <span className="file-icon">{file.type === 'dossier' ? '📁' : '📄'}</span>
-                    {file.nom}
-                    {file.tags && file.tags.length > 0 && (
-                      <span className="file-tags">
-                        {file.tags.map(tag => (
-                          <span key={tag} className="file-tag">🏷️ {tag}</span>
-                        ))}
-                      </span>
-                    )}
-                  </td>
-                  <td>{file.type === 'dossier' ? 'Dossier' : file.extension?.toUpperCase()}</td>
-                  <td>{formatSize(file.taille)}</td>
-                  <td>{new Date(file.dateModification).toLocaleDateString('fr-FR')}</td>
-                  <td>
-                    <div className="actions-menu">
-                      <button
-                        className="action-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setContextMenu({
-                            x: e.clientX,
-                            y: e.clientY,
-                            item: file,
-                          });
-                        }}
-                      >
-                        ⋮
-                      </button>
-                    </div>
+              {filteredFiles.length === 0 ? (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
+                    {searchQuery ? 'Aucun fichier trouvé' : 'Aucun fichier dans ce dossier'}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredFiles.map((file) => (
+                  <tr key={file.id}>
+                    <td 
+                      onClick={() => handleFileClick(file)} 
+                      className={`file-name ${file.type === 'fichier' ? 'file-clickable' : ''}`}
+                    >
+                      <span className="file-icon">{file.type === 'dossier' ? '📁' : '📄'}</span>
+                      {file.nom}
+                      {file.tags && file.tags.length > 0 && (
+                        <span className="file-tags">
+                          {file.tags.map(tag => (
+                            <span key={tag} className="file-tag">🏷️ {tag}</span>
+                          ))}
+                        </span>
+                      )}
+                    </td>
+                    <td>{file.type === 'dossier' ? 'Dossier' : file.extension?.toUpperCase()}</td>
+                    <td>{formatSize(file.taille)}</td>
+                    <td>{new Date(file.dateModification).toLocaleDateString('fr-FR')}</td>
+                    <td>
+                      <div className="actions-menu">
+                        <button
+                          className="action-button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setContextMenu({
+                              x: e.clientX,
+                              y: e.clientY,
+                              item: file,
+                            });
+                          }}
+                        >
+                          ⋮
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
 
@@ -556,6 +511,7 @@ export const Files = () => {
             </div>
           )}
         </div>
+        )}
 
         {contextMenu && (
           <>
@@ -613,11 +569,25 @@ export const Files = () => {
                     }}>
                       🏷️ Étiquetter
                     </button>
-                    <button onClick={() => {
-                      setAllFiles(prev => prev.map(f =>
-                        f.id === contextMenu.item.id ? { ...f, estFavori: !f.estFavori } : f
-                      ));
-                      setContextMenu(null);
+                    <button onClick={async () => {
+                      try {
+                        const newFavoriteStatus = !contextMenu.item.estFavori;
+                        await api.updateFileMetadata(contextMenu.item.id, { estFavori: newFavoriteStatus });
+                        await loadFiles(); // Recharger depuis l'API
+                        setContextMenu(null);
+                        notifySuccess(
+                          newFavoriteStatus ? 'Ajouté aux favoris' : 'Retiré des favoris',
+                          `"${contextMenu.item.nom}" ${newFavoriteStatus ? 'a été ajouté aux favoris' : 'a été retiré des favoris'}`,
+                          'favorite'
+                        );
+                      } catch (error) {
+                        notifyError(
+                          'Erreur',
+                          'Impossible de mettre à jour les favoris',
+                          error?.message || 'Erreur serveur',
+                          'favorite'
+                        );
+                      }
                     }}>
                       {contextMenu.item.estFavori ? '⭐ Retirer des favoris' : '⭐ Ajouter aux favoris'}
                     </button>
@@ -636,28 +606,43 @@ export const Files = () => {
           <UploadModal
             onClose={() => setUploadModalOpen(false)}
             onUpload={async (file) => {
-              const fileId = Date.now().toString();
-              const newFile = {
-                id: fileId,
-                nom: file.name,
-                type: 'fichier',
-                taille: file.size,
-                dateModification: new Date().toISOString(),
-                extension: file.name.split('.').pop(),
-                parentId: currentFolderId,
-                mimeType: file.type || 'application/octet-stream',
-              };
-              
-              // Sauvegarder le contenu du fichier
               try {
-                await saveFileContent(fileId, file);
-              } catch (error) {
-                console.error('Erreur lors de la sauvegarde du contenu:', error);
-              }
-              
-              // Ajouter au tableau global et mettre à jour l'affichage
-              setAllFiles(prev => [...prev, newFile]);
-              setUploadModalOpen(false);
+                // Vérifier la taille du fichier (max 100MB)
+                const maxSize = 100 * 1024 * 1024;
+                if (file.size > maxSize) {
+                  notifyError(
+                    'Échec du téléversement',
+                    `Le fichier "${file.name}" est trop volumineux`,
+                    `Taille maximale autorisée : 100MB (fichier : ${(file.size / (1024 * 1024)).toFixed(2)}MB)`,
+                    'upload'
+                  );
+                  return;
+                }
+
+                // Upload via l'API
+                const newFile = await api.uploadFile(file, currentFolderId);
+
+                // Recharger les fichiers
+                await loadFiles();
+
+                // Le log d'activité est créé automatiquement par le backend
+
+                // Notification de succès
+                notifySuccess(
+                  'Fichier téléversé',
+                  `"${file.name}" a été téléversé avec succès`,
+                  'upload'
+                );
+
+      setUploadModalOpen(false);
+    } catch (error) {
+      notifyError(
+        'Échec du téléversement',
+        `Impossible de téléverser "${file.name}"`,
+        error?.message || 'Erreur serveur',
+        'upload'
+      );
+    }
             }}
           />
         )}
@@ -665,17 +650,32 @@ export const Files = () => {
         {createFolderModalOpen && (
           <CreateFolderModal
             onClose={() => setCreateFolderModalOpen(false)}
-            onCreate={(nom) => {
-              const newFolder = {
-                id: Date.now().toString(),
-                nom,
-                type: 'dossier',
-                dateModification: new Date().toISOString(),
-                parentId: currentFolderId,
-              };
-              // Ajouter au tableau global et mettre à jour l'affichage
-              setAllFiles(prev => [...prev, newFolder]);
-              setCreateFolderModalOpen(false);
+            onCreate={async (nom) => {
+              try {
+                // Créer le dossier via l'API
+                const newFolder = await api.createFolder(nom, currentFolderId);
+
+                // Recharger les fichiers
+                await loadFiles();
+
+                // Le log d'activité est créé automatiquement par le backend
+
+                // Notification de succès
+                notifySuccess(
+                  'Dossier créé',
+                  `Le dossier "${nom}" a été créé avec succès`,
+                  'folder_creation'
+                );
+
+                setCreateFolderModalOpen(false);
+              } catch (error) {
+                notifyError(
+                  'Erreur de création',
+                  `Impossible de créer le dossier "${nom}"`,
+                  error?.message || 'Erreur serveur',
+                  'folder_creation'
+                );
+              }
             }}
           />
         )}
@@ -684,11 +684,20 @@ export const Files = () => {
           <RenameModal
             item={renameModal.item}
             onClose={() => setRenameModal({ open: false })}
-            onRename={(newName) => {
-              setAllFiles(prev => prev.map(f =>
-                f.id === renameModal.item?.id ? { ...f, nom: newName } : f
-              ));
-              setRenameModal({ open: false });
+            onRename={async (newName) => {
+              try {
+                await api.renameFile(renameModal.item?.id || '', newName);
+                await loadFiles(); // Recharger depuis l'API
+                setRenameModal({ open: false });
+                notifySuccess('Fichier renommé', `"${renameModal.item?.nom}" a été renommé en "${newName}"`);
+              } catch (error) {
+                notifyError(
+                  'Erreur de renommage',
+                  `Impossible de renommer "${renameModal.item?.nom}"`,
+                  error?.message || 'Erreur serveur',
+                  'rename'
+                );
+              }
             }}
           />
         )}
@@ -704,10 +713,19 @@ export const Files = () => {
           <TagModal
             item={tagModal.item}
             onClose={() => setTagModal({ open: false, item: null })}
-            onSave={(tags) => {
-              setAllFiles(prev => prev.map(f =>
-                f.id === tagModal.item.id ? { ...f, tags } : f
-              ));
+            onSave={async (tags) => {
+              try {
+                await api.updateFileMetadata(tagModal.item.id, { tags });
+                await loadFiles(); // Recharger depuis l'API
+                notifySuccess('Étiquettes mises à jour', 'Les étiquettes ont été modifiées');
+              } catch (error) {
+                notifyError(
+                  'Erreur',
+                  'Impossible de mettre à jour les étiquettes',
+                  error?.message || 'Erreur serveur',
+                  'update_tags'
+                );
+              }
             }}
           />
         )}

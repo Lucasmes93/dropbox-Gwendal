@@ -39,7 +39,6 @@ export const OfficeEditor = () => {
         setLoading(false);
       }
     } catch (error) {
-      console.error('Erreur lors du chargement du fichier:', error);
       setError('Erreur lors du chargement');
       setLoading(false);
     }

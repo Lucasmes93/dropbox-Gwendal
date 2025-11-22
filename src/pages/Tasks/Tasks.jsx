@@ -1,120 +1,114 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { TaskModal } from '../../components/TaskModal/TaskModal';
+import { useAuth } from '../../context/AuthContext';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
+import api from '../../services/api';
 import './Tasks.scss';
 
 export const Tasks = () => {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [filter, setFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadTasks();
 
-    // Écouter les événements de synchronisation automatique
-    const handleDataSynced = (e) => {
-      const customEvent = e;
-      if (customEvent.detail?.key === 'monDrive_tasks') {
-        try {
-          const updated = customEvent.detail.value;
-          setTasks(updated);
-        } catch (error) {
-          console.error('Erreur lors de la synchronisation des tâches:', error);
-        }
-      }
-    };
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
+    }
 
-    window.addEventListener('dataSynced', handleDataSynced);
-    
+    // S'abonner aux événements WebSocket
+    const unsubscribeTaskCreated = onWebSocketEvent('task_created', () => {
+      loadTasks();
+    });
+    const unsubscribeTaskUpdated = onWebSocketEvent('task_updated', () => {
+      loadTasks();
+    });
+    const unsubscribeTaskDeleted = onWebSocketEvent('task_deleted', () => {
+      loadTasks();
+    });
+
+    // Recharger toutes les 10 secondes en fallback
+    const interval = setInterval(loadTasks, 10000);
+
     return () => {
-      window.removeEventListener('dataSynced', handleDataSynced);
-    };
-  }, []); // Charger une seule fois au montage
-
-  const loadTasks = () => {
-    try {
-      const saved = localStorage.getItem('monDrive_tasks');
-      if (saved) {
-        setTasks(JSON.parse(saved));
-      } else {
-        // Exemples de tâches
-        const exampleTasks = [
-          {
-            id: '1',
-            titre: 'Finaliser le rapport mensuel',
-            description: 'Compléter les sections manquantes et vérifier les données',
-            statut: 'en_cours',
-            priorite: 'haute',
-            dateEcheance: new Date(Date.now() + 86400000).toISOString(),
-          },
-          {
-            id: '2',
-            titre: 'Préparer la présentation client',
-            description: 'Créer les slides pour la réunion de vendredi',
-            statut: 'a_faire',
-            priorite: 'normale',
-            dateEcheance: new Date(Date.now() + 172800000).toISOString(),
-          },
-          {
-            id: '3',
-            titre: 'Réviser le code du module X',
-            description: 'Vérifier les tests et optimiser les performances',
-            statut: 'a_faire',
-            priorite: 'basse',
-          },
-          {
-            id: '4',
-            titre: 'Répondre aux emails en attente',
-            statut: 'a_faire',
-            priorite: 'normale',
-          },
-          {
-            id: '5',
-            titre: 'Mettre à jour la documentation',
-            description: 'Documenter les nouvelles fonctionnalités',
-            statut: 'termine',
-            priorite: 'normale',
-          },
-        ];
-        setTasks(exampleTasks);
-        localStorage.setItem('monDrive_tasks', JSON.stringify(exampleTasks));
+      clearInterval(interval);
+      unsubscribeTaskCreated();
+      unsubscribeTaskUpdated();
+      unsubscribeTaskDeleted();
+      if (user?.id) {
+        disconnectWebSocket();
       }
+    };
+  }, [user]);
+
+  const loadTasks = async () => {
+    try {
+      setLoading(true);
+      const loadedTasks = await api.getTasks();
+      setTasks(loadedTasks);
     } catch (error) {
-      console.error('Erreur:', error);
+      setTasks([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const saveTasks = (newTasks) => {
-    localStorage.setItem('monDrive_tasks', JSON.stringify(newTasks));
-    setTasks(newTasks);
-    window.dispatchEvent(new Event('tasksUpdated'));
-  };
-
-  const handleSave = (task) => {
-    if (selectedTask) {
-      saveTasks(tasks.map(t => t.id === selectedTask.id ? task : t));
-    } else {
-      saveTasks([...tasks, task]);
+  const handleSave = async (task) => {
+    try {
+      if (selectedTask) {
+        await api.updateTask(selectedTask.id, {
+          titre: task.titre,
+          description: task.description,
+          statut: task.statut,
+          priorite: task.priorite,
+          dateEcheance: task.dateEcheance,
+        });
+      } else {
+        await api.createTask({
+          titre: task.titre,
+          description: task.description,
+          statut: task.statut,
+          priorite: task.priorite,
+          dateEcheance: task.dateEcheance,
+        });
+      }
+      await loadTasks();
+      setModalOpen(false);
+      setSelectedTask(null);
+    } catch (error) {
+      alert('Erreur lors de la sauvegarde: ' + (error?.message || 'Erreur serveur'));
     }
-    setModalOpen(false);
-    setSelectedTask(null);
   };
 
-  const handleDelete = (taskId) => {
-    saveTasks(tasks.filter(t => t.id !== taskId));
+  const handleDelete = async (taskId) => {
+    try {
+      await api.deleteTask(taskId);
+      await loadTasks();
+    } catch (error) {
+      alert('Erreur lors de la suppression: ' + (error?.message || 'Erreur serveur'));
+    }
   };
 
-  const handleToggleStatus = (taskId) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
+  const handleToggleStatus = async (taskId) => {
+    try {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
 
-    let newStatus;
-    if (task.statut === 'a_faire') newStatus = 'en_cours';
-    else if (task.statut === 'en_cours') newStatus = 'termine';
-    else newStatus = 'a_faire';
+      let newStatus;
+      if (task.statut === 'a_faire') newStatus = 'en_cours';
+      else if (task.statut === 'en_cours') newStatus = 'termine';
+      else newStatus = 'a_faire';
 
-    saveTasks(tasks.map(t => t.id === taskId ? { ...t, statut: newStatus } : t));
+      await api.updateTask(taskId, { statut: newStatus });
+      await loadTasks();
+    } catch (error) {
+    }
   };
 
   const filteredTasks = filter === 'all' 

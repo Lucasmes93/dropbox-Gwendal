@@ -99,7 +99,6 @@ export const FileEditor = () => {
         }
       }
     } catch (error) {
-      console.error('Erreur lors du chargement du fichier:', error);
       setLoading(false);
     }
   };
@@ -229,7 +228,6 @@ export const FileEditor = () => {
           }
         }
       } catch (error) {
-        console.error('Erreur lors de la vérification des mises à jour:', error);
       }
     };
 
@@ -238,7 +236,6 @@ export const FileEditor = () => {
         loadCollaborators();
         checkForUpdates();
       } catch (error) {
-        console.error('Erreur lors de la vérification des mises à jour:', error);
       }
     }, 500); // Vérifier toutes les 500ms pour un temps réel plus fluide
     

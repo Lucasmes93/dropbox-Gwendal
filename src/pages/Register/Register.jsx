@@ -55,7 +55,8 @@ export const Register = () => {
       await register(nom, prenom, email, password);
       navigate('/dashboard');
     } catch (err) {
-      setErrors({ general: 'Erreur lors de la création du compte' });
+      const errorMessage = err?.message || 'Erreur lors de la création du compte';
+      setErrors({ general: errorMessage });
     } finally {
       setLoading(false);
     }

@@ -1,84 +1,84 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
+import { useAuth } from '../../context/AuthContext';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
+import api from '../../services/api';
 import './Activity.scss';
 
 export const Activity = () => {
+  const { user } = useAuth();
   const [activities, setActivities] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadActivities();
-    // Écouter les nouvelles activités
-    const handleActivityUpdate = () => loadActivities();
-    window.addEventListener('activityUpdated', handleActivityUpdate);
-    return () => window.removeEventListener('activityUpdated', handleActivityUpdate);
-  }, []);
+    
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
+    }
 
-  const loadActivities = () => {
-    try {
-      const saved = localStorage.getItem('monDrive_activities');
-      if (saved) {
-        const loaded = JSON.parse(saved);
-        setActivities(loaded.sort((a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        ));
-      } else {
-        // Exemples d'activités complètes
-        const mockActivities = [
-          {
-            id: '1',
-            type: 'file_created',
-            utilisateur: 'Vous',
-            description: 'a créé le fichier "rapport_final.pdf"',
-            timestamp: new Date().toISOString(),
-            lien: '/files',
-          },
-          {
-            id: '2',
-            type: 'file_shared',
-            utilisateur: 'Marie Dupont',
-            description: 'a partagé "presentation.pptx" avec vous',
-            timestamp: new Date(Date.now() - 3600000).toISOString(),
-            lien: '/shared',
-          },
-          {
-            id: '3',
-            type: 'file_modified',
-            utilisateur: 'Vous',
-            description: 'a modifié "budget_2024.xlsx"',
-            timestamp: new Date(Date.now() - 7200000).toISOString(),
-            lien: '/files',
-          },
-          {
-            id: '4',
-            type: 'event_created',
-            utilisateur: 'Jean Martin',
-            description: 'a créé l\'événement "Réunion équipe"',
-            timestamp: new Date(Date.now() - 10800000).toISOString(),
-            lien: '/calendar',
-          },
-          {
-            id: '5',
-            type: 'task_completed',
-            utilisateur: 'Vous',
-            description: 'a terminé la tâche "Finaliser le rapport"',
-            timestamp: new Date(Date.now() - 14400000).toISOString(),
-            lien: '/tasks',
-          },
-          {
-            id: '6',
-            type: 'file_created',
-            utilisateur: 'Sophie Bernard',
-            description: 'a créé le dossier "Projet Alpha"',
-            timestamp: new Date(Date.now() - 18000000).toISOString(),
-            lien: '/files',
-          },
-        ];
-        setActivities(mockActivities);
-        localStorage.setItem('monDrive_activities', JSON.stringify(mockActivities));
+    // S'abonner aux événements WebSocket qui créent des activités
+    const unsubscribeFileCreated = onWebSocketEvent('file_created', () => {
+      loadActivities();
+    });
+    const unsubscribeFileUpdated = onWebSocketEvent('file_updated', () => {
+      loadActivities();
+    });
+    const unsubscribeFileDeleted = onWebSocketEvent('file_deleted', () => {
+      loadActivities();
+    });
+    const unsubscribeFileRenamed = onWebSocketEvent('file_renamed', () => {
+      loadActivities();
+    });
+    const unsubscribeFolderCreated = onWebSocketEvent('folder_created', () => {
+      loadActivities();
+    });
+
+    // Recharger toutes les 10 secondes en fallback
+    const interval = setInterval(loadActivities, 10000);
+    
+    return () => {
+      clearInterval(interval);
+      unsubscribeFileCreated();
+      unsubscribeFileUpdated();
+      unsubscribeFileDeleted();
+      unsubscribeFileRenamed();
+      unsubscribeFolderCreated();
+      if (user?.id) {
+        disconnectWebSocket();
       }
+    };
+  }, [user]);
+
+  const loadActivities = async () => {
+    try {
+      setLoading(true);
+      // Charger les activités depuis l'API
+      const logs = await api.getActivityLogs();
+      
+      // Convertir les logs en format d'activité pour l'affichage
+      const activitiesFromLogs = logs
+        .filter(log => {
+          // Filtrer les logs d'utilisateurs supprimés (si userName est "Utilisateur supprimé", on peut les garder pour l'historique admin)
+          return log.userName && log.userName !== 'Utilisateur supprimé' || user?.role === 'admin';
+        })
+        .map(log => ({
+          id: log.id,
+          type: log.type,
+          utilisateur: log.userName || 'Utilisateur inconnu',
+          description: log.description,
+          timestamp: log.timestamp,
+          lien: log.details?.fileId ? `/files` : '/activity',
+          details: log.details,
+        }));
+
+      setActivities(activitiesFromLogs);
     } catch (error) {
-      console.error('Erreur:', error);
+      setActivities([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,9 +86,30 @@ export const Activity = () => {
     switch (type) {
       case 'file_created': return '📄';
       case 'file_modified': return '✏️';
+      case 'file_renamed': return '✏️';
+      case 'file_deleted': return '🗑️';
+      case 'file_restored': return '♻️';
+      case 'file_moved': return '📦';
+      case 'file_downloaded': return '⬇️';
+      case 'file_tagged': return '🏷️';
+      case 'file_favorited': return '⭐';
       case 'file_shared': return '🔗';
-      case 'event_created': return '📅';
-      case 'task_completed': return '✅';
+      case 'folder_created': return '📁';
+      case 'calendar_event_created': return '📅';
+      case 'calendar_event_updated': return '📅';
+      case 'calendar_event_deleted': return '📅';
+      case 'note_created': return '📝';
+      case 'note_updated': return '📝';
+      case 'note_deleted': return '📝';
+      case 'task_created': return '✅';
+      case 'task_updated': return '✅';
+      case 'task_deleted': return '✅';
+      case 'board_created': return '📊';
+      case 'board_updated': return '📊';
+      case 'board_deleted': return '📊';
+      case 'contact_created': return '👤';
+      case 'contact_updated': return '👤';
+      case 'contact_deleted': return '👤';
       default: return '📝';
     }
   };
@@ -100,10 +121,11 @@ export const Activity = () => {
   const activityTypes = [
     { value: 'all', label: 'Toutes' },
     { value: 'file_created', label: 'Fichiers créés' },
-    { value: 'file_modified', label: 'Fichiers modifiés' },
+    { value: 'file_renamed', label: 'Fichiers renommés' },
+    { value: 'file_deleted', label: 'Fichiers supprimés' },
     { value: 'file_shared', label: 'Partages' },
-    { value: 'event_created', label: 'Événements' },
-    { value: 'task_completed', label: 'Tâches' },
+    { value: 'calendar_event_created', label: 'Événements' },
+    { value: 'task_created', label: 'Tâches' },
   ];
 
   return (

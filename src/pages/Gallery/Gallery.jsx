@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { UploadModal } from '../../components/UploadModal/UploadModal';
-import { saveFileContent, getFileContent, base64ToBlob, deleteFileContent } from '../../services/storage';
+import api from '../../services/api';
 import './Gallery.scss';
 
 export const Gallery = () => {
@@ -12,65 +12,23 @@ export const Gallery = () => {
 
   useEffect(() => {
     loadImages();
-    
-    // Écouter les mises à jour des fichiers
-    const handleFilesUpdate = () => {
-      loadImages();
-    };
-    
-    window.addEventListener('filesUpdated', handleFilesUpdate);
-    return () => {
-      window.removeEventListener('filesUpdated', handleFilesUpdate);
-    };
+    // Recharger toutes les 5 secondes
+    const interval = setInterval(loadImages, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const loadImages = () => {
+  const loadImages = async () => {
     try {
-      const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
-        const allFiles = JSON.parse(saved);
-        const imageFiles = allFiles.filter(f =>
-          !f.estSupprime &&
-          f.type === 'fichier' &&
-          (f.mimeType?.startsWith('image/') ||
-           f.extension?.toLowerCase().match(/^(jpg|jpeg|png|gif|webp|svg|bmp)$/))
-        );
-        setImages(imageFiles);
-      } else {
-        // Exemples d'images (simulées)
-        const exampleImages = [
-          {
-            id: 'img1',
-            nom: 'photo_vacances.jpg',
-            type: 'fichier',
-            taille: 3145728,
-            extension: 'jpg',
-            mimeType: 'image/jpeg',
-            dateModification: new Date().toISOString(),
-          },
-          {
-            id: 'img2',
-            nom: 'logo_entreprise.png',
-            type: 'fichier',
-            taille: 524288,
-            extension: 'png',
-            mimeType: 'image/png',
-            dateModification: new Date(Date.now() - 86400000).toISOString(),
-          },
-          {
-            id: 'img3',
-            nom: 'screenshot_app.png',
-            type: 'fichier',
-            taille: 1048576,
-            extension: 'png',
-            mimeType: 'image/png',
-            dateModification: new Date(Date.now() - 172800000).toISOString(),
-          },
-        ];
-        setImages(exampleImages);
-      }
+      const allFiles = await api.getFiles();
+      const imageFiles = allFiles.filter(f =>
+        !f.estSupprime &&
+        f.type === 'fichier' &&
+        (f.mimeType?.startsWith('image/') ||
+         f.extension?.toLowerCase().match(/^(jpg|jpeg|png|gif|webp|svg|bmp)$/))
+      );
+      setImages(imageFiles);
     } catch (error) {
-      console.error('Erreur:', error);
+      setImages([]);
     }
   };
 
@@ -114,7 +72,6 @@ export const Gallery = () => {
         setSelectedImage(null);
       }
     } catch (error) {
-      console.error('Erreur lors de la suppression de l\'image:', error);
       alert('Erreur lors de la suppression de l\'image');
     }
   };
@@ -202,7 +159,6 @@ export const Gallery = () => {
         window.dispatchEvent(new Event('filesUpdated'));
       }
     } catch (error) {
-      console.error('Erreur lors du nettoyage:', error);
     }
   };
 
@@ -258,7 +214,6 @@ export const Gallery = () => {
       // Recharger les images
       loadImages();
     } catch (error) {
-      console.error('Erreur lors de l\'upload de l\'image:', error);
       if (error.name === 'QuotaExceededError' || error.message?.includes('QuotaExceededError')) {
         const message = 'L\'espace de stockage est plein.\n\n' +
           'Pour libérer de l\'espace, vous pouvez :\n' +

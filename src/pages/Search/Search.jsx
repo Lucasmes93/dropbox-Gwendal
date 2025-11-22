@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout } from '../../components/Layout/Layout';
+import api from '../../services/api';
 import './Search.scss';
 
 export const Search = () => {
   const [searchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
   const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -14,20 +16,24 @@ export const Search = () => {
       return;
     }
 
-    try {
-      const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
-        const allFiles = JSON.parse(saved);
-        const filtered = allFiles.filter(f => 
-          !f.estSupprime && 
-          f.nom.toLowerCase().includes(query.toLowerCase())
-        );
-        setResults(filtered);
-      }
-    } catch (error) {
-      console.error('Erreur lors de la recherche:', error);
-    }
+    searchFiles();
   }, [query]);
+
+  const searchFiles = async () => {
+    try {
+      setLoading(true);
+      const allFiles = await api.getFiles();
+      const filtered = allFiles.filter(f => 
+        !f.estSupprime && 
+        f.nom.toLowerCase().includes(query.toLowerCase())
+      );
+      setResults(filtered);
+    } catch (error) {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const formatSize = (bytes) => {
     if (!bytes) return '-';
@@ -65,10 +71,13 @@ export const Search = () => {
               ))}
             </tbody>
           </table>
-          {results.length === 0 && query && (
+          {loading && (
+            <div className="empty-state">Recherche en cours...</div>
+          )}
+          {!loading && results.length === 0 && query && (
             <div className="empty-state">Aucun résultat trouvé</div>
           )}
-          {!query && (
+          {!loading && !query && (
             <div className="empty-state">Entrez un terme de recherche</div>
           )}
         </div>

@@ -1,59 +1,39 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { useAuth } from '../../context/AuthContext';
-import { getAllShareLinks, getAllCompanyShares } from '../../services/storage';
+import api from '../../services/api';
 import './Shared.scss';
 
 export const Shared = () => {
   const { user } = useAuth();
   const [sharedFiles, setSharedFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadSharedFiles = () => {
-      try {
-        const saved = localStorage.getItem('monDrive_files');
-        const shareLinks = getAllShareLinks();
-        const companyShares = user ? getAllCompanyShares().filter(share => share.sharedByUserId === user.id) : [];
-        
-        if (saved) {
-          const allFiles = JSON.parse(saved);
-          const shared = [];
-          
-          // Ajouter les liens publics actifs
-          shareLinks
-            .filter(link => link.actif)
-            .forEach(link => {
-              const file = allFiles.find(f => f.id === link.fichierId && !f.estSupprime);
-              if (file) {
-                shared.push({ file, link, type: 'public' });
-              }
-            });
-          
-          // Ajouter les partages avec la boîte
-          companyShares.forEach(share => {
-            const file = allFiles.find(f => f.id === share.fichierId && !f.estSupprime);
-            if (file) {
-              shared.push({ file, share, type: 'company' });
-            }
-          });
-          
-          setSharedFiles(shared);
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement des fichiers partagés:', error);
-      }
-    };
-
     loadSharedFiles();
-    const handleUpdate = () => loadSharedFiles();
-    const handleCompanyUpdate = () => loadSharedFiles();
-    window.addEventListener('filesUpdated', handleUpdate);
-    window.addEventListener('companyShareUpdated', handleCompanyUpdate);
-    return () => {
-      window.removeEventListener('filesUpdated', handleUpdate);
-      window.removeEventListener('companyShareUpdated', handleCompanyUpdate);
-    };
+    // Recharger toutes les 5 secondes
+    const interval = setInterval(loadSharedFiles, 5000);
+    return () => clearInterval(interval);
   }, [user]);
+
+  const loadSharedFiles = async () => {
+    try {
+      setLoading(true);
+      const allFiles = await api.getFiles();
+      // Filtrer les fichiers partagés (avec partage actif)
+      const shared = allFiles
+        .filter(f => !f.estSupprime && (f.partagePublic || f.partageAvecBoite))
+        .map(file => ({
+          file,
+          type: file.partagePublic ? 'public' : 'company',
+        }));
+      setSharedFiles(shared);
+    } catch (error) {
+      setSharedFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const formatSize = (bytes) => {
     if (!bytes) return '-';
@@ -125,8 +105,11 @@ export const Shared = () => {
               ))}
             </tbody>
           </table>
-          {sharedFiles.length === 0 && (
+          {!loading && sharedFiles.length === 0 && (
             <div className="empty-state">Aucun fichier partagé</div>
+          )}
+          {loading && (
+            <div className="empty-state">Chargement...</div>
           )}
         </div>
       </div>

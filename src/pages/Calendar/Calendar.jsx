@@ -1,95 +1,64 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { CalendarModal } from '../../components/CalendarModal/CalendarModal';
+import { useAuth } from '../../context/AuthContext';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
+import api from '../../services/api';
 import './Calendar.scss';
 
 export const Calendar = () => {
+  const { user } = useAuth();
   const [events, setEvents] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [view, setView] = useState('month');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadEvents();
 
-    // Écouter les événements de synchronisation automatique
-    const handleDataSynced = (e) => {
-      const customEvent = e;
-      if (customEvent.detail?.key === 'monDrive_calendar') {
-        try {
-          const updated = customEvent.detail.value;
-          setEvents(updated);
-        } catch (error) {
-          console.error('Erreur lors de la synchronisation du calendrier:', error);
-        }
-      }
-    };
-
-    window.addEventListener('dataSynced', handleDataSynced);
-    
-    return () => {
-      window.removeEventListener('dataSynced', handleDataSynced);
-    };
-  }, []); // Charger une seule fois au montage
-
-  const loadEvents = () => {
-    try {
-      const saved = localStorage.getItem('monDrive_calendar');
-      if (saved) {
-        setEvents(JSON.parse(saved));
-      } else {
-        // Exemples d'événements
-        const exampleEvents = [
-          {
-            id: '1',
-            titre: 'Réunion équipe',
-            description: 'Réunion hebdomadaire pour faire le point sur les projets',
-            dateDebut: new Date(Date.now() + 86400000).toISOString(),
-            dateFin: new Date(Date.now() + 86400000 + 3600000).toISOString(),
-            lieu: 'Salle de réunion A',
-            couleur: '#2196f3',
-          },
-          {
-            id: '2',
-            titre: 'Deadline projet Alpha',
-            description: 'Date limite pour la livraison du projet',
-            dateDebut: new Date(Date.now() + 172800000).toISOString(),
-            dateFin: new Date(Date.now() + 172800000).toISOString(),
-            couleur: '#f44336',
-          },
-          {
-            id: '3',
-            titre: 'Formation React',
-            description: 'Session de formation sur React 19',
-            dateDebut: new Date(Date.now() + 259200000).toISOString(),
-            dateFin: new Date(Date.now() + 259200000 + 7200000).toISOString(),
-            lieu: 'Salle de formation',
-            couleur: '#4caf50',
-          },
-          {
-            id: '4',
-            titre: 'Présentation client',
-            description: 'Présentation des résultats du trimestre',
-            dateDebut: new Date(Date.now() + 345600000).toISOString(),
-            dateFin: new Date(Date.now() + 345600000 + 5400000).toISOString(),
-            lieu: 'Bureau client',
-            couleur: '#ff9800',
-          },
-        ];
-        setEvents(exampleEvents);
-        localStorage.setItem('monDrive_calendar', JSON.stringify(exampleEvents));
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
     }
-  };
 
-  const saveEvents = (newEvents) => {
-    localStorage.setItem('monDrive_calendar', JSON.stringify(newEvents));
-    setEvents(newEvents);
-    window.dispatchEvent(new Event('calendarUpdated'));
+    // S'abonner aux événements WebSocket
+    const unsubscribeEventCreated = onWebSocketEvent('calendar_event_created', () => {
+      loadEvents();
+    });
+    const unsubscribeEventUpdated = onWebSocketEvent('calendar_event_updated', () => {
+      loadEvents();
+    });
+    const unsubscribeEventDeleted = onWebSocketEvent('calendar_event_deleted', () => {
+      loadEvents();
+    });
+
+    // Recharger toutes les 10 secondes en fallback
+    const interval = setInterval(loadEvents, 10000);
+
+    return () => {
+      clearInterval(interval);
+      unsubscribeEventCreated();
+      unsubscribeEventUpdated();
+      unsubscribeEventDeleted();
+      if (user?.id) {
+        disconnectWebSocket();
+      }
+    };
+  }, [user]);
+
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      const loadedEvents = await api.getCalendarEvents();
+      setEvents(loadedEvents);
+    } catch (error) {
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDateClick = (date) => {
@@ -103,24 +72,45 @@ export const Calendar = () => {
     setModalOpen(true);
   };
 
-  const handleSaveEvent = (event) => {
-    if (selectedEvent) {
-      // Modifier
-      const updated = events.map(e => e.id === selectedEvent.id ? event : e);
-      saveEvents(updated);
-    } else {
-      // Créer
-      saveEvents([...events, event]);
+  const handleSaveEvent = async (event) => {
+    try {
+      if (selectedEvent) {
+        // Modifier
+        await api.updateCalendarEvent(selectedEvent.id, {
+          titre: event.titre,
+          description: event.description,
+          dateDebut: event.dateDebut,
+          dateFin: event.dateFin,
+          couleur: event.couleur,
+        });
+      } else {
+        // Créer
+        await api.createCalendarEvent({
+          titre: event.titre,
+          description: event.description,
+          dateDebut: event.dateDebut,
+          dateFin: event.dateFin,
+          couleur: event.couleur,
+        });
+      }
+      await loadEvents();
+      setModalOpen(false);
+      setSelectedEvent(null);
+      setSelectedDate(null);
+    } catch (error) {
+      alert('Erreur lors de la sauvegarde: ' + (error?.message || 'Erreur serveur'));
     }
-    setModalOpen(false);
-    setSelectedEvent(null);
-    setSelectedDate(null);
   };
 
-  const handleDeleteEvent = (eventId) => {
-    saveEvents(events.filter(e => e.id !== eventId));
-    setModalOpen(false);
-    setSelectedEvent(null);
+  const handleDeleteEvent = async (eventId) => {
+    try {
+      await api.deleteCalendarEvent(eventId);
+      await loadEvents();
+      setModalOpen(false);
+      setSelectedEvent(null);
+    } catch (error) {
+      alert('Erreur lors de la suppression: ' + (error?.message || 'Erreur serveur'));
+    }
   };
 
   const getDaysInMonth = (date) => {

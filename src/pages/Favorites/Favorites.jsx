@@ -1,50 +1,31 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
+import api from '../../services/api';
 import './Favorites.scss';
 
 export const Favorites = () => {
   const [favoriteFiles, setFavoriteFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadFavorites = () => {
-      try {
-        const saved = localStorage.getItem('monDrive_files');
-        if (saved) {
-          const allFiles = JSON.parse(saved);
-          const favorites = allFiles.filter(f => f.estFavori && !f.estSupprime);
-          setFavoriteFiles(favorites);
-        } else {
-          setFavoriteFiles([]);
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement des favoris:', error);
-        setFavoriteFiles([]);
-      }
-    };
-
-    // Charger immédiatement
     loadFavorites();
-    
-    // Écouter les mises à jour
-    const handleUpdate = () => {
-      loadFavorites();
-    };
-    window.addEventListener('filesUpdated', handleUpdate);
-    
-    // Écouter les événements de synchronisation
-    const handleDataSynced = (e) => {
-      const customEvent = e;
-      if (customEvent.detail?.key === 'monDrive_files') {
-        loadFavorites();
-      }
-    };
-    window.addEventListener('dataSynced', handleDataSynced);
-    
-    return () => {
-      window.removeEventListener('filesUpdated', handleUpdate);
-      window.removeEventListener('dataSynced', handleDataSynced);
-    };
-  }, []); // Charger une seule fois au montage
+    // Recharger toutes les 5 secondes
+    const interval = setInterval(loadFavorites, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadFavorites = async () => {
+    try {
+      setLoading(true);
+      const allFiles = await api.getFiles();
+      const favorites = allFiles.filter(f => f.estFavori && !f.estSupprime);
+      setFavoriteFiles(favorites);
+    } catch (error) {
+      setFavoriteFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const formatSize = (bytes) => {
     if (!bytes) return '-';
@@ -82,8 +63,11 @@ export const Favorites = () => {
               ))}
             </tbody>
           </table>
-          {favoriteFiles.length === 0 && (
+          {!loading && favoriteFiles.length === 0 && (
             <div className="empty-state">Aucun fichier favori</div>
+          )}
+          {loading && (
+            <div className="empty-state">Chargement...</div>
           )}
         </div>
       </div>

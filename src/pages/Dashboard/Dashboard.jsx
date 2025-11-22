@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
 import './Dashboard.scss';
 
 export const Dashboard = () => {
@@ -15,215 +17,152 @@ export const Dashboard = () => {
 
   useEffect(() => {
     loadDashboardData();
-  }, []);
-
-  const loadDashboardData = () => {
-    // Charger les fichiers récents avec exemples
-    try {
-      const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
-        const allFiles = JSON.parse(saved);
-        const recent = allFiles
-          .filter(f => !f.estSupprime)
-          .sort((a, b) => 
-            new Date(b.dateModification).getTime() - new Date(a.dateModification).getTime()
-          )
-          .slice(0, 5);
-        setRecentFiles(recent);
-
-        const totalSize = allFiles
-          .filter(f => f.type === 'fichier' && !f.estSupprime && f.taille)
-          .reduce((sum, f) => sum + (f.taille || 0), 0);
-        setStorageUsed(totalSize);
-      } else {
-        // Données d'exemple complètes
-        const exampleFiles = [
-          { id: '1', nom: 'rapport_final.pdf', type: 'fichier', taille: 2048576, dateModification: new Date().toISOString() },
-          { id: '2', nom: 'presentation.pptx', type: 'fichier', taille: 5242880, dateModification: new Date(Date.now() - 86400000).toISOString() },
-          { id: '3', nom: 'budget_2024.xlsx', type: 'fichier', taille: 1048576, dateModification: new Date(Date.now() - 172800000).toISOString() },
-          { id: '4', nom: 'Documents', type: 'dossier', dateModification: new Date(Date.now() - 259200000).toISOString() },
-          { id: '5', nom: 'photo_vacances.jpg', type: 'fichier', taille: 3145728, dateModification: new Date(Date.now() - 345600000).toISOString() },
-        ];
-        setRecentFiles(exampleFiles);
-        setStorageUsed(exampleFiles.reduce((sum, f) => sum + (f.taille || 0), 0));
-        localStorage.setItem('monDrive_files', JSON.stringify(exampleFiles));
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
+    
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
     }
 
-    // Charger les événements avec exemples
-    try {
-      const saved = localStorage.getItem('monDrive_calendar');
-      if (saved) {
-        const events = JSON.parse(saved);
-        const upcoming = events
-          .filter(e => new Date(e.dateDebut) >= new Date())
-          .sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime())
-          .slice(0, 5);
-        setUpcomingEvents(upcoming);
-      } else {
-        const exampleEvents = [
-          {
-            id: '1',
-            titre: 'Réunion équipe',
-            dateDebut: new Date(Date.now() + 86400000).toISOString(),
-            dateFin: new Date(Date.now() + 86400000 + 3600000).toISOString(),
-            couleur: '#2196f3',
-          },
-          {
-            id: '2',
-            titre: 'Deadline projet',
-            dateDebut: new Date(Date.now() + 172800000).toISOString(),
-            dateFin: new Date(Date.now() + 172800000).toISOString(),
-            couleur: '#f44336',
-          },
-          {
-            id: '3',
-            titre: 'Formation',
-            dateDebut: new Date(Date.now() + 259200000).toISOString(),
-            dateFin: new Date(Date.now() + 259200000 + 7200000).toISOString(),
-            couleur: '#4caf50',
-          },
-        ];
-        setUpcomingEvents(exampleEvents);
-        localStorage.setItem('monDrive_calendar', JSON.stringify(exampleEvents));
+    // S'abonner aux événements WebSocket
+    const unsubscribeFileCreated = onWebSocketEvent('file_created', () => {
+      loadDashboardData();
+    });
+    const unsubscribeFolderCreated = onWebSocketEvent('folder_created', () => {
+      loadDashboardData();
+    });
+    const unsubscribeFileDeleted = onWebSocketEvent('file_deleted', () => {
+      loadDashboardData();
+    });
+    const unsubscribeFileRenamed = onWebSocketEvent('file_renamed', () => {
+      loadDashboardData();
+    });
+    const unsubscribeFileUpdated = onWebSocketEvent('file_updated', () => {
+      loadDashboardData();
+    });
+    const unsubscribeNotificationCreated = onWebSocketEvent('notification_created', (data) => {
+      if (data.notification.userId === user?.id) {
+        loadDashboardData();
       }
+    });
+    const unsubscribeCalendarEventCreated = onWebSocketEvent('calendar_event_created', () => {
+      loadDashboardData();
+    });
+    const unsubscribeCalendarEventUpdated = onWebSocketEvent('calendar_event_updated', () => {
+      loadDashboardData();
+    });
+    const unsubscribeCalendarEventDeleted = onWebSocketEvent('calendar_event_deleted', () => {
+      loadDashboardData();
+    });
+    const unsubscribeTaskCreated = onWebSocketEvent('task_created', () => {
+      loadDashboardData();
+    });
+    const unsubscribeTaskUpdated = onWebSocketEvent('task_updated', () => {
+      loadDashboardData();
+    });
+    const unsubscribeTaskDeleted = onWebSocketEvent('task_deleted', () => {
+      loadDashboardData();
+    });
+
+    // Recharger toutes les 10 secondes en fallback (moins fréquent car WebSocket est prioritaire)
+    const interval = setInterval(loadDashboardData, 10000);
+    
+    return () => {
+      clearInterval(interval);
+      unsubscribeFileCreated();
+      unsubscribeFolderCreated();
+      unsubscribeFileDeleted();
+      unsubscribeFileRenamed();
+      unsubscribeFileUpdated();
+      unsubscribeNotificationCreated();
+      unsubscribeCalendarEventCreated();
+      unsubscribeCalendarEventUpdated();
+      unsubscribeCalendarEventDeleted();
+      unsubscribeTaskCreated();
+      unsubscribeTaskUpdated();
+      unsubscribeTaskDeleted();
+      if (user?.id) {
+        disconnectWebSocket();
+      }
+    };
+  }, [user]);
+
+  const loadDashboardData = async () => {
+    try {
+      // Charger les fichiers récents depuis l'API
+      const allFiles = await api.getFiles();
+      
+      // Filtrer uniquement les fichiers non supprimés
+      const activeFiles = allFiles.filter(f => !f.estSupprime);
+      
+      const recent = activeFiles
+        .sort((a, b) => 
+          new Date(b.dateModification).getTime() - new Date(a.dateModification).getTime()
+        )
+        .slice(0, 5);
+      setRecentFiles(recent);
+
+      // Calculer le stockage uniquement sur les fichiers actifs (non supprimés)
+      const totalSize = activeFiles
+        .filter(f => f.type === 'fichier' && f.taille && typeof f.taille === 'number')
+        .reduce((sum, f) => sum + (f.taille || 0), 0);
+      
+      // S'assurer que le stockage est bien à 0 si aucun fichier
+      setStorageUsed(totalSize || 0);
     } catch (error) {
-      console.error('Erreur:', error);
+      setRecentFiles([]);
+      setStorageUsed(0);
     }
 
-    // Charger les tâches avec exemples
+    // Charger les activités depuis l'API
     try {
-      const saved = localStorage.getItem('monDrive_tasks');
-      if (saved) {
-        const allTasks = JSON.parse(saved);
-        const activeTasks = allTasks
-          .filter(t => t.statut !== 'termine')
-          .slice(0, 5);
-        setTasks(activeTasks);
-      } else {
-        const exampleTasks = [
-          {
-            id: '1',
-            titre: 'Finaliser le rapport',
-            statut: 'en_cours',
-            priorite: 'haute',
-            dateEcheance: new Date(Date.now() + 86400000).toISOString(),
-          },
-          {
-            id: '2',
-            titre: 'Préparer la présentation',
-            statut: 'a_faire',
-            priorite: 'normale',
-          },
-          {
-            id: '3',
-            titre: 'Réviser le budget',
-            statut: 'a_faire',
-            priorite: 'basse',
-            dateEcheance: new Date(Date.now() + 259200000).toISOString(),
-          },
-        ];
-        setTasks(exampleTasks);
-        localStorage.setItem('monDrive_tasks', JSON.stringify(exampleTasks));
-      }
+      const logs = await api.getActivityLogs();
+      setActivities(logs.slice(0, 10));
     } catch (error) {
-      console.error('Erreur:', error);
+      setActivities([]);
     }
 
-    // Charger les activités avec exemples
+    // Charger les notifications depuis l'API
     try {
-      const saved = localStorage.getItem('monDrive_activities');
-      if (saved) {
-        const allActivities = JSON.parse(saved);
-        setActivities(allActivities.slice(0, 10));
-      } else {
-        const exampleActivities = [
-          {
-            id: '1',
-            type: 'file_created',
-            utilisateur: 'Vous',
-            description: 'a créé le fichier "rapport_final.pdf"',
-            timestamp: new Date().toISOString(),
-          },
-          {
-            id: '2',
-            type: 'file_shared',
-            utilisateur: 'Marie Dupont',
-            description: 'a partagé "presentation.pptx" avec vous',
-            timestamp: new Date(Date.now() - 3600000).toISOString(),
-          },
-          {
-            id: '3',
-            type: 'event_created',
-            utilisateur: 'Vous',
-            description: 'a créé l\'événement "Réunion équipe"',
-            timestamp: new Date(Date.now() - 7200000).toISOString(),
-          },
-          {
-            id: '4',
-            type: 'task_completed',
-            utilisateur: 'Vous',
-            description: 'a terminé la tâche "Préparer la présentation"',
-            timestamp: new Date(Date.now() - 10800000).toISOString(),
-          },
-        ];
-        setActivities(exampleActivities);
-        localStorage.setItem('monDrive_activities', JSON.stringify(exampleActivities));
-      }
+      const allNotifications = await api.getNotifications();
+      setNotifications(allNotifications.filter(n => !n.lu).slice(0, 5));
     } catch (error) {
-      console.error('Erreur:', error);
+      setNotifications([]);
     }
 
-    // Charger les notifications avec exemples
+    // Charger les événements à venir depuis l'API
     try {
-      const saved = localStorage.getItem('monDrive_notifications');
-      if (saved) {
-        const allNotifications = JSON.parse(saved);
-        setNotifications(allNotifications.filter(n => !n.lu).slice(0, 5));
-      } else {
-        const exampleNotifications = [
-          {
-            id: '1',
-            type: 'file_shared',
-            titre: 'Fichier partagé',
-            message: 'Marie Dupont a partagé "presentation.pptx" avec vous',
-            timestamp: new Date(Date.now() - 1800000).toISOString(),
-            lu: false,
-          },
-          {
-            id: '2',
-            type: 'event_reminder',
-            titre: 'Rappel événement',
-            message: 'Réunion équipe dans 1 heure',
-            timestamp: new Date(Date.now() - 3600000).toISOString(),
-            lu: false,
-          },
-          {
-            id: '3',
-            type: 'task_assigned',
-            titre: 'Nouvelle tâche',
-            message: 'Une nouvelle tâche vous a été assignée',
-            timestamp: new Date(Date.now() - 5400000).toISOString(),
-            lu: false,
-          },
-        ];
-        setNotifications(exampleNotifications);
-        localStorage.setItem('monDrive_notifications', JSON.stringify(exampleNotifications));
-      }
+      const allEvents = await api.getCalendarEvents();
+      const now = new Date();
+      const upcoming = allEvents
+        .filter(e => new Date(e.dateDebut) >= now)
+        .sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime())
+        .slice(0, 5);
+      setUpcomingEvents(upcoming);
     } catch (error) {
-      console.error('Erreur:', error);
+      setUpcomingEvents([]);
+    }
+
+    // Charger les tâches en cours depuis l'API
+    try {
+      const allTasks = await api.getTasks();
+      const inProgress = allTasks
+        .filter(t => t.statut === 'en_cours' || t.statut === 'a_faire')
+        .slice(0, 5);
+      setTasks(inProgress);
+    } catch (error) {
+      setTasks([]);
     }
   };
 
   const formatSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 Mo';
+    if (bytes < 1024) return bytes + ' o';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
     if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
     return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' Go';
   };
 
-  const storagePercent = (storageUsed / storageTotal) * 100;
+  const storagePercent = storageUsed > 0 ? (storageUsed / storageTotal) * 100 : 0;
 
   return (
     <Layout>
@@ -361,7 +300,9 @@ export const Dashboard = () => {
                   <div key={activity.id} className="widget-item">
                     <span className="widget-icon">📝</span>
                     <div className="widget-content">
-                      <span className="widget-text">{activity.description}</span>
+                      <span className="widget-text">
+                        <strong>{activity.userName || 'Utilisateur inconnu'}</strong> {activity.description}
+                      </span>
                       <span className="widget-meta">
                         {new Date(activity.timestamp).toLocaleString('fr-FR')}
                       </span>

@@ -22,7 +22,6 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
           setStorageUsed(totalSize);
         }
       } catch (error) {
-        console.error('Erreur lors du calcul du stockage:', error);
       }
     };
 
@@ -187,6 +186,15 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
           <span className="sidebar-icon">⚙️</span>
           Paramètres
         </div>
+        {user?.role === 'admin' && (
+          <div 
+            className={`sidebar-item ${isActive('/admin') ? 'active' : ''}`}
+            onClick={() => handleNavClick('/admin')}
+          >
+            <span className="sidebar-icon">👑</span>
+            Administration
+          </div>
+        )}
       </div>
     </nav>
   );

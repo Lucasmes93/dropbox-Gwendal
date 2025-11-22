@@ -81,7 +81,6 @@ const syncKey = (key: string) => {
       }));
     }
   } catch (error) {
-    console.error(`Erreur lors de la synchronisation de ${key}:`, error);
   }
 };
 
@@ -111,7 +110,6 @@ const syncAll = () => {
             lastSyncValues[key] = value;
             hasChanges = true;
           } catch (parseError) {
-            console.error(`Erreur lors du parsing de ${key}:`, parseError);
             // Ne pas bloquer la synchronisation pour une clé invalide
           }
         } else if (!value && lastSyncValues[key]) {
@@ -120,7 +118,6 @@ const syncAll = () => {
           hasChanges = true;
         }
       } catch (error) {
-        console.error(`Erreur lors de la synchronisation de ${key}:`, error);
         // Continuer avec les autres clés
       }
     });
@@ -150,13 +147,11 @@ const syncAll = () => {
               keyCount++;
             }
           } catch (error) {
-            console.error(`Erreur lors de la synchronisation de ${key}:`, error);
             // Continuer avec les autres clés
           }
         }
       }
     } catch (error) {
-      console.error('Erreur lors de la synchronisation des clés dynamiques:', error);
     }
 
     lastSyncTimestamp = currentTimestamp;
@@ -168,7 +163,6 @@ const syncAll = () => {
       }));
     }
   } catch (error) {
-    console.error('Erreur critique lors de la synchronisation:', error);
     // Ne pas propager l'erreur pour éviter de casser l'application
   } finally {
     isSyncing = false;

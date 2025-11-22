@@ -1,82 +1,100 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { ContactModal } from '../../components/ContactModal/ContactModal';
+import { useAuth } from '../../context/AuthContext';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
+import api from '../../services/api';
 import './Contacts.scss';
 
 export const Contacts = () => {
+  const { user } = useAuth();
   const [contacts, setContacts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadContacts();
-  }, []);
 
-  const loadContacts = () => {
-    try {
-      const saved = localStorage.getItem('monDrive_contacts');
-      if (saved) {
-        setContacts(JSON.parse(saved));
-      } else {
-        // Exemples de contacts
-        const exampleContacts = [
-          {
-            id: '1',
-            prenom: 'Marie',
-            nom: 'Dupont',
-            email: 'marie.dupont@email.com',
-            telephone: '01 23 45 67 89',
-            entreprise: 'TechCorp',
-            poste: 'Développeuse',
-            adresse: '123 Rue de la Paix, Paris',
-            notes: 'Contact principal pour le projet X',
-          },
-          {
-            id: '2',
-            prenom: 'Jean',
-            nom: 'Martin',
-            email: 'jean.martin@email.com',
-            telephone: '06 12 34 56 78',
-            entreprise: 'DesignStudio',
-            poste: 'Designer',
-          },
-          {
-            id: '3',
-            prenom: 'Sophie',
-            nom: 'Bernard',
-            email: 'sophie.bernard@email.com',
-            telephone: '01 98 76 54 32',
-            entreprise: 'MarketingPro',
-            poste: 'Chef de projet',
-            adresse: '456 Avenue des Champs, Lyon',
-          },
-        ];
-        setContacts(exampleContacts);
-        localStorage.setItem('monDrive_contacts', JSON.stringify(exampleContacts));
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
+    }
+
+    // S'abonner aux événements WebSocket
+    const unsubscribeContactCreated = onWebSocketEvent('contact_created', () => {
+      loadContacts();
+    });
+    const unsubscribeContactUpdated = onWebSocketEvent('contact_updated', () => {
+      loadContacts();
+    });
+    const unsubscribeContactDeleted = onWebSocketEvent('contact_deleted', () => {
+      loadContacts();
+    });
+
+    // Recharger toutes les 10 secondes en fallback
+    const interval = setInterval(loadContacts, 10000);
+
+    return () => {
+      clearInterval(interval);
+      unsubscribeContactCreated();
+      unsubscribeContactUpdated();
+      unsubscribeContactDeleted();
+      if (user?.id) {
+        disconnectWebSocket();
       }
+    };
+  }, [user]);
+
+  const loadContacts = async () => {
+    try {
+      setLoading(true);
+      const loadedContacts = await api.getContacts();
+      setContacts(loadedContacts);
     } catch (error) {
-      console.error('Erreur:', error);
+      setContacts([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const saveContacts = (newContacts) => {
-    localStorage.setItem('monDrive_contacts', JSON.stringify(newContacts));
-    setContacts(newContacts);
-  };
-
-  const handleSave = (contact) => {
-    if (selectedContact) {
-      saveContacts(contacts.map(c => c.id === selectedContact.id ? contact : c));
-    } else {
-      saveContacts([...contacts, contact]);
+  const handleSave = async (contact) => {
+    try {
+      if (selectedContact) {
+        await api.updateContact(selectedContact.id, {
+          nom: contact.nom,
+          prenom: contact.prenom,
+          email: contact.email,
+          telephone: contact.telephone,
+          entreprise: contact.entreprise,
+          notes: contact.notes,
+        });
+      } else {
+        await api.createContact({
+          nom: contact.nom,
+          prenom: contact.prenom,
+          email: contact.email,
+          telephone: contact.telephone,
+          entreprise: contact.entreprise,
+          notes: contact.notes,
+        });
+      }
+      await loadContacts();
+      setModalOpen(false);
+      setSelectedContact(null);
+    } catch (error) {
+      alert('Erreur lors de la sauvegarde: ' + (error?.message || 'Erreur serveur'));
     }
-    setModalOpen(false);
-    setSelectedContact(null);
   };
 
-  const handleDelete = (contactId) => {
-    saveContacts(contacts.filter(c => c.id !== contactId));
+  const handleDelete = async (contactId) => {
+    try {
+      await api.deleteContact(contactId);
+      await loadContacts();
+    } catch (error) {
+      alert('Erreur lors de la suppression: ' + (error?.message || 'Erreur serveur'));
+    }
   };
 
   const filteredContacts = contacts.filter(c =>

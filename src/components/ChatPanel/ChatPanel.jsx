@@ -12,18 +12,14 @@ export const ChatPanel = ({ onClose }) => {
     try {
       const saved = localStorage.getItem('monDrive_chats');
       if (saved) {
-        setChats(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setChats(Array.isArray(parsed) ? parsed : []);
       } else {
-        // Exemples de chats
-        const exampleChats = [
-          { id: '1', userId: '2', userName: 'Marie Dupont', unreadCount: 2 },
-          { id: '2', userId: '3', userName: 'Jean Martin', unreadCount: 0 },
-        ];
-        setChats(exampleChats);
-        localStorage.setItem('monDrive_chats', JSON.stringify(exampleChats));
+        // Ne pas créer de tableau vide - laisser vide
+        setChats([]);
       }
     } catch (error) {
-      console.error('Erreur:', error);
+      setChats([]);
     }
   }, []);
 
@@ -36,7 +32,6 @@ export const ChatPanel = ({ onClose }) => {
           setMessages(JSON.parse(saved));
         }
       } catch (error) {
-        console.error('Erreur:', error);
       }
     }
   }, [selectedChat]);
@@ -69,24 +64,28 @@ export const ChatPanel = ({ onClose }) => {
       <div className="chat-content">
         {!selectedChat ? (
           <div className="chats-list">
-            {chats.map(chat => (
-              <div
-                key={chat.id}
-                className={`chat-item ${chat.unreadCount > 0 ? 'unread' : ''}`}
-                onClick={() => setSelectedChat(chat)}
-              >
-                <div className="chat-avatar">{chat.userName[0]}</div>
-                <div className="chat-info">
-                  <div className="chat-name">{chat.userName}</div>
-                  {chat.lastMessage && (
-                    <div className="chat-preview">{chat.lastMessage}</div>
+            {chats.length > 0 ? (
+              chats.map(chat => (
+                <div
+                  key={chat.id}
+                  className={`chat-item ${chat.unreadCount > 0 ? 'unread' : ''}`}
+                  onClick={() => setSelectedChat(chat)}
+                >
+                  <div className="chat-avatar">{chat.userName?.[0] || '?'}</div>
+                  <div className="chat-info">
+                    <div className="chat-name">{chat.userName || 'Utilisateur'}</div>
+                    {chat.lastMessage && (
+                      <div className="chat-preview">{chat.lastMessage}</div>
+                    )}
+                  </div>
+                  {chat.unreadCount > 0 && (
+                    <span className="chat-badge">{chat.unreadCount}</span>
                   )}
                 </div>
-                {chat.unreadCount > 0 && (
-                  <span className="chat-badge">{chat.unreadCount}</span>
-                )}
-              </div>
-            ))}
+              ))
+            ) : (
+              <div className="chats-empty">Aucun message</div>
+            )}
           </div>
         ) : (
           <div className="chat-conversation">

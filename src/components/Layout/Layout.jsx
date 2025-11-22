@@ -118,7 +118,11 @@ export const Layout = ({ children }) => {
               onClick={() => setMenuOpen(!menuOpen)}
             >
               <UserStatus status={user?.status || 'offline'} />
-              <span>{user?.prenom} {user?.nom}</span>
+              <span className="user-name">
+                {user?.prenom && user?.nom 
+                  ? `${user.prenom} ${user.nom}` 
+                  : user?.email || 'Utilisateur'}
+              </span>
               <span className="dropdown-arrow">▼</span>
             </button>
             {menuOpen && (

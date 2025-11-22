@@ -135,9 +135,17 @@
   cursor: pointer;
   font-size: 0.9rem;
   transition: background 0.2s;
+  max-width: 300px;
 
   &:hover {
     background: #f5f5f5;
+  }
+
+  .user-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
   }
 }
 

@@ -113,9 +113,25 @@
   margin-bottom: 0.25rem;
 }
 
+.notification-error-cause {
+  font-size: 0.85rem;
+  color: #c62828;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #ffebee;
+  border-left: 3px solid #c62828;
+  border-radius: 4px;
+  
+  strong {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+}
+
 .notification-time {
   font-size: 0.75rem;
   color: #999;
+  margin-top: 0.5rem;
 }
 
 .notification-delete {

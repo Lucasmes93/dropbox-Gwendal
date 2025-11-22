@@ -35,7 +35,8 @@ export const Login = () => {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
-      setError('Identifiants incorrects');
+      const errorMessage = err?.message || 'Identifiants incorrects';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -54,7 +55,7 @@ export const Login = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="exemple@email.com"
+              placeholder="votre@email.com"
             />
           </div>
 

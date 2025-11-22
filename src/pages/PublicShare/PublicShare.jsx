@@ -54,7 +54,6 @@ export const PublicShare = () => {
         setError('Fichier introuvable.');
       }
     } catch (error) {
-      console.error('Erreur lors de la récupération du fichier:', error);
       setError('Erreur lors du chargement du fichier.');
     }
     

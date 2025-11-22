@@ -1,28 +1,34 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
+import api from '../../services/api';
 import './Recent.scss';
 
 export const Recent = () => {
   const [recentFiles, setRecentFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
-        const allFiles = JSON.parse(saved);
-        // Trier par date de modification (plus récent en premier)
-        const recent = allFiles
-          .filter(f => !f.estSupprime)
-          .sort((a, b) => 
-            new Date(b.dateModification).getTime() - new Date(a.dateModification).getTime()
-          )
-          .slice(0, 50); // Limiter à 50 fichiers récents
-        setRecentFiles(recent);
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement des fichiers récents:', error);
-    }
+    loadRecentFiles();
   }, []);
+
+  const loadRecentFiles = async () => {
+    try {
+      setLoading(true);
+      const allFiles = await api.getFiles();
+      // Trier par date de modification (plus récent en premier)
+      const recent = allFiles
+        .filter(f => !f.estSupprime)
+        .sort((a, b) => 
+          new Date(b.dateModification).getTime() - new Date(a.dateModification).getTime()
+        )
+        .slice(0, 50); // Limiter à 50 fichiers récents
+      setRecentFiles(recent);
+    } catch (error) {
+      setRecentFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const formatSize = (bytes) => {
     if (!bytes) return '-';
@@ -66,8 +72,11 @@ export const Recent = () => {
               ))}
             </tbody>
           </table>
-          {recentFiles.length === 0 && (
+          {!loading && recentFiles.length === 0 && (
             <div className="empty-state">Aucun fichier récent</div>
+          )}
+          {loading && (
+            <div className="empty-state">Chargement...</div>
           )}
         </div>
       </div>

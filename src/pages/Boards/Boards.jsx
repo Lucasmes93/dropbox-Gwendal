@@ -2,125 +2,100 @@ import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
 import { BoardModal } from '../../components/BoardModal/BoardModal';
 import { CardModal } from '../../components/CardModal/CardModal';
+import { useAuth } from '../../context/AuthContext';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
+import api from '../../services/api';
 import './Boards.scss';
 
 export const Boards = () => {
+  const { user } = useAuth();
   const [boards, setBoards] = useState([]);
   const [selectedBoard, setSelectedBoard] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState(null);
   const [cardModalColumnId, setCardModalColumnId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadBoards();
-  }, []);
 
-  const loadBoards = () => {
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
+    }
+
+    // S'abonner aux événements WebSocket
+    const unsubscribeBoardCreated = onWebSocketEvent('board_created', () => {
+      loadBoards();
+    });
+    const unsubscribeBoardUpdated = onWebSocketEvent('board_updated', () => {
+      loadBoards();
+    });
+    const unsubscribeBoardDeleted = onWebSocketEvent('board_deleted', () => {
+      loadBoards();
+    });
+
+    // Recharger toutes les 10 secondes en fallback
+    const interval = setInterval(loadBoards, 10000);
+
+    return () => {
+      clearInterval(interval);
+      unsubscribeBoardCreated();
+      unsubscribeBoardUpdated();
+      unsubscribeBoardDeleted();
+      if (user?.id) {
+        disconnectWebSocket();
+      }
+    };
+  }, [user]);
+
+  const loadBoards = async () => {
     try {
-      const saved = localStorage.getItem('monDrive_boards');
-      if (saved) {
-        const loaded = JSON.parse(saved);
-        setBoards(loaded);
-        if (loaded.length > 0 && !selectedBoard) {
-          setSelectedBoard(loaded[0]);
+      setLoading(true);
+      const loadedBoards = await api.getBoards();
+      setBoards(loadedBoards);
+      if (loadedBoards.length > 0 && !selectedBoard) {
+        setSelectedBoard(loadedBoards[0]);
+      } else if (selectedBoard) {
+        const updatedBoard = loadedBoards.find(b => b.id === selectedBoard.id);
+        if (updatedBoard) {
+          setSelectedBoard(updatedBoard);
+        } else if (loadedBoards.length > 0) {
+          setSelectedBoard(loadedBoards[0]);
+        } else {
+          setSelectedBoard(null);
         }
-      } else {
-        // Exemples de tableaux Kanban
-        const exampleBoards = [
-          {
-            id: '1',
-            nom: 'Projet Alpha',
-            description: 'Tableau de suivi du projet principal',
-            colonnes: [
-              {
-                id: 'col1',
-                nom: 'À faire',
-                cartes: [
-                  { id: 'card1', titre: 'Créer la maquette', description: 'Design de la page d\'accueil', ordre: 0 },
-                  { id: 'card2', titre: 'Écrire les tests', description: 'Tests unitaires pour le module X', ordre: 1 },
-                ],
-                ordre: 0,
-              },
-              {
-                id: 'col2',
-                nom: 'En cours',
-                cartes: [
-                  { id: 'card3', titre: 'Développer l\'API', description: 'Créer les endpoints REST', ordre: 0 },
-                ],
-                ordre: 1,
-              },
-              {
-                id: 'col3',
-                nom: 'Terminé',
-                cartes: [
-                  { id: 'card4', titre: 'Setup du projet', description: 'Configuration initiale', ordre: 0 },
-                  { id: 'card5', titre: 'Documentation', description: 'Rédaction de la doc technique', ordre: 1 },
-                ],
-                ordre: 2,
-              },
-            ],
-            dateCreation: new Date(Date.now() - 86400000).toISOString(),
-          },
-          {
-            id: '2',
-            nom: 'Bugs à corriger',
-            description: 'Liste des bugs identifiés',
-            colonnes: [
-              {
-                id: 'col4',
-                nom: 'Critique',
-                cartes: [
-                  { id: 'card6', titre: 'Bug login', description: 'Problème de connexion sur mobile', ordre: 0 },
-                ],
-                ordre: 0,
-              },
-              {
-                id: 'col5',
-                nom: 'Mineur',
-                cartes: [
-                  { id: 'card7', titre: 'Typo dans le footer', description: 'Corriger "contat" en "contact"', ordre: 0 },
-                ],
-                ordre: 1,
-              },
-            ],
-            dateCreation: new Date(Date.now() - 172800000).toISOString(),
-          },
-        ];
-        setBoards(exampleBoards);
-        setSelectedBoard(exampleBoards[0]);
-        localStorage.setItem('monDrive_boards', JSON.stringify(exampleBoards));
       }
     } catch (error) {
-      console.error('Erreur:', error);
+      setBoards([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const saveBoards = (newBoards) => {
-    localStorage.setItem('monDrive_boards', JSON.stringify(newBoards));
-    setBoards(newBoards);
+  const handleCreateBoard = async () => {
+    try {
+      const newBoard = await api.createBoard({
+        nom: 'Nouveau tableau',
+      });
+      await loadBoards();
+      setSelectedBoard(newBoard);
+    } catch (error) {
+      alert('Erreur lors de la création: ' + (error?.message || 'Erreur serveur'));
+    }
   };
 
-  const handleCreateBoard = () => {
-    const newBoard = {
-      id: Date.now().toString(),
-      nom: 'Nouveau tableau',
-      colonnes: [
-        { id: '1', nom: 'À faire', cartes: [], ordre: 0 },
-        { id: '2', nom: 'En cours', cartes: [], ordre: 1 },
-        { id: '3', nom: 'Terminé', cartes: [], ordre: 2 },
-      ],
-      dateCreation: new Date().toISOString(),
-    };
-    const updated = [...boards, newBoard];
-    saveBoards(updated);
-    setSelectedBoard(newBoard);
-  };
-
-  const handleSaveBoard = (board) => {
-    const updated = boards.map(b => b.id === board.id ? board : b);
-    saveBoards(updated);
-    setSelectedBoard(board);
+  const handleSaveBoard = async (board) => {
+    try {
+      await api.updateBoard(board.id, {
+        nom: board.nom,
+        colonnes: board.colonnes,
+      });
+      await loadBoards();
+    } catch (error) {
+      alert('Erreur lors de la sauvegarde: ' + (error?.message || 'Erreur serveur'));
+    }
   };
 
   const handleAddCard = (columnId, boardId) => {
@@ -135,7 +110,8 @@ export const Boards = () => {
     setCardModalOpen(true);
   };
 
-  const handleSaveCard = (cardData, columnId) => {
+  const handleSaveCard = async (cardData, columnId) => {
+    if (!selectedBoard) return;
     const board = boards.find(b => b.id === selectedBoard.id);
     if (!board) return;
 
@@ -159,7 +135,7 @@ export const Boards = () => {
         targetColumn.cartes.push(cardData);
       }
 
-      handleSaveBoard({ ...board, colonnes: updatedColumns });
+      await handleSaveBoard({ ...board, colonnes: updatedColumns });
     } else {
       // Créer une nouvelle carte
       const updated = board.colonnes.map(col =>
@@ -168,24 +144,27 @@ export const Boards = () => {
           : col
       );
 
-      handleSaveBoard({ ...board, colonnes: updated });
+      await handleSaveBoard({ ...board, colonnes: updated });
     }
   };
 
-  const handleDeleteCard = () => {
-    if (!selectedCard) return;
+  const handleDeleteCard = async () => {
+    if (!selectedCard || !selectedBoard) return;
     
-    const board = boards.find(b => b.id === selectedBoard.id);
-    if (!board) return;
+    try {
+      const board = boards.find(b => b.id === selectedBoard.id);
+      if (!board) return;
 
-    const updatedColumns = board.colonnes.map(col => ({
-      ...col,
-      cartes: col.cartes.filter(c => c.id !== selectedCard.id)
-    }));
+      const updatedColumns = board.colonnes.map(col => ({
+        ...col,
+        cartes: col.cartes.filter(c => c.id !== selectedCard.id)
+      }));
 
-    handleSaveBoard({ ...board, colonnes: updatedColumns });
-    setCardModalOpen(false);
-    setSelectedCard(null);
+      await handleSaveBoard({ ...board, colonnes: updatedColumns });
+      setCardModalOpen(false);
+      setSelectedCard(null);
+    } catch (error) {
+    }
   };
 
   const handleMoveCard = (cardId, fromColumnId, toColumnId, boardId, insertIndex = null) => {

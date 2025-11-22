@@ -1,52 +1,57 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout/Layout';
-import { deleteFileContent } from '../../services/storage';
+import { useAuth } from '../../context/AuthContext';
+import { connectWebSocket, disconnectWebSocket, onWebSocketEvent } from '../../services/websocket';
+import api from '../../services/api';
 import './Trash.scss';
 
 export const Trash = () => {
+  const { user } = useAuth();
   const [trashedFiles, setTrashedFiles] = useState([]);
   const [showConfirm, setShowConfirm] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Charger les fichiers supprimés depuis localStorage
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
-        const allFiles= JSON.parse(saved);
-        const deleted = allFiles.filter(f => f.estSupprime === true);
-        setTrashedFiles(deleted);
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement de la corbeille:', error);
-    }
-  }, []);
-
-  // Mettre à jour quand localStorage change (écouter les changements)
-  useEffect(() => {
-    const handleStorageChange = () => {
-      try {
-        const saved = localStorage.getItem('monDrive_files');
-        if (saved) {
-          const allFiles = JSON.parse(saved);
-          const deleted = allFiles.filter(f => f.estSupprime === true);
-          setTrashedFiles(deleted);
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement de la corbeille:', error);
-      }
-    };
-
-    // Écouter les changements de localStorage
-    window.addEventListener('storage', handleStorageChange);
+    loadTrashedFiles();
     
-    // Vérifier périodiquement (pour les changements dans le même onglet)
-    const interval = setInterval(handleStorageChange, 500);
+    // Connexion WebSocket pour les mises à jour en temps réel
+    if (user?.id) {
+      connectWebSocket(user.id);
+    }
 
+    // S'abonner aux événements WebSocket
+    const unsubscribeFileDeleted = onWebSocketEvent('file_deleted', () => {
+      loadTrashedFiles();
+    });
+    const unsubscribeFileRestored = onWebSocketEvent('file_restored', () => {
+      loadTrashedFiles();
+    });
+
+    // Recharger toutes les 10 secondes en fallback
+    const interval = setInterval(loadTrashedFiles, 10000);
+    
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
+      unsubscribeFileDeleted();
+      unsubscribeFileRestored();
+      if (user?.id) {
+        disconnectWebSocket();
+      }
     };
-  }, []);
+  }, [user]);
+
+  const loadTrashedFiles = async () => {
+    try {
+      setLoading(true);
+      const allFiles = await api.getFiles();
+      const deleted = allFiles.filter(f => f.estSupprime === true);
+      setTrashedFiles(deleted);
+    } catch (error) {
+      setTrashedFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const formatSize = (bytes) => {
     if (!bytes) return '-';
@@ -56,48 +61,39 @@ export const Trash = () => {
     return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' Go';
   };
 
-  const updateAllFiles = (updater) => {
+  const handleRestore = async (item) => {
     try {
-      const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
-        const allFiles = JSON.parse(saved);
-        const updated = updater(allFiles);
-        localStorage.setItem('monDrive_files', JSON.stringify(updated));
-        // Déclencher un événement pour notifier les autres composants
-        window.dispatchEvent(new Event('filesUpdated'));
-        // Mettre à jour l'affichage
-        const deleted = updated.filter(f => f.estSupprime === true);
-        setTrashedFiles(deleted);
-      }
+      await api.restoreFile(item.id);
+      await loadTrashedFiles();
+      alert('Fichier restauré avec succès');
     } catch (error) {
-      console.error('Erreur lors de la mise à jour:', error);
+      alert('Erreur lors de la restauration: ' + (error?.message || 'Erreur serveur'));
     }
   };
 
-  const handleRestore = (item) => {
-    updateAllFiles(files => files.map(f =>
-      f.id === item.id ? { ...f, estSupprime: false } : f
-    ));
-  };
-
-  const handleDeletePermanently = (item) => {
-    // Supprimer le contenu du fichier si c'est un fichier
-    if (item.type === 'fichier') {
-      deleteFileContent(item.id);
+  const handleDeletePermanently = async (item) => {
+    try {
+      await api.deleteFile(item.id);
+      await loadTrashedFiles();
+      setShowConfirm(null);
+      alert('Fichier supprimé définitivement');
+    } catch (error) {
+      alert('Erreur lors de la suppression définitive: ' + (error?.message || 'Erreur serveur'));
     }
-    updateAllFiles(files => files.filter(f => f.id !== item.id));
-    setShowConfirm(null);
   };
 
-  const handleEmptyTrash = () => {
-    // Supprimer le contenu de tous les fichiers de la corbeille
-    trashedFiles.forEach(item => {
-      if (item.type === 'fichier') {
-        deleteFileContent(item.id);
+  const handleEmptyTrash = async () => {
+    try {
+      // Supprimer tous les fichiers de la corbeille
+      for (const item of trashedFiles) {
+        await api.deleteFile(item.id);
       }
-    });
-    updateAllFiles(files => files.filter(f => !f.estSupprime));
-    setShowConfirm(null);
+      await loadTrashedFiles();
+      setShowConfirm(null);
+      alert('Corbeille vidée avec succès');
+    } catch (error) {
+      alert('Erreur lors du vidage de la corbeille: ' + (error?.message || 'Erreur serveur'));
+    }
   };
 
   return (
@@ -156,8 +152,11 @@ export const Trash = () => {
             </tbody>
           </table>
 
-          {trashedFiles.length === 0 && (
+          {!loading && trashedFiles.length === 0 && (
             <div className="empty-state">La corbeille est vide</div>
+          )}
+          {loading && (
+            <div className="empty-state">Chargement...</div>
           )}
         </div>
 
