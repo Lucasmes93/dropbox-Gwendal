@@ -20,7 +20,7 @@ export const Settings = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(null);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
-  const [syncInterval, setSyncInterval] = useState(30); // en secondes
+  const [syncInterval, setSyncInterval] = useState(2); // en secondes (par défaut 2 secondes pour synchronisation continue)
   const [mainFolderHandle, setMainFolderHandle] = useState(null);
   const [subFolders, setSubFolders] = useState([]);
   const [selectedSubFolder, setSelectedSubFolder] = useState(null);
@@ -205,9 +205,14 @@ export const Settings = () => {
               <li><strong>Étape 1 :</strong> L'entreprise dépose ses fichiers dans un dossier principal sur votre ordinateur (ex: C:\Entreprise\Documents)</li>
               <li><strong>Étape 2 :</strong> Vous sélectionnez ce dossier principal dans l'application</li>
               <li><strong>Étape 3 :</strong> Vous choisissez un sous-dossier spécifique à synchroniser (ex: "ProjetX") - optionnel, vous pouvez synchroniser tout le dossier principal</li>
-              <li><strong>Étape 4 :</strong> Activez la synchronisation automatique</li>
-              <li><strong>Résultat :</strong> Tous les fichiers du dossier/sous-dossier sélectionné sont automatiquement synchronisés avec l'application toutes les X secondes</li>
-              <li>Les modifications dans l'application sont aussi synchronisées vers le dossier local</li>
+              <li><strong>Étape 4 :</strong> Activez la synchronisation automatique (recommandé : 2-3 secondes pour une synchronisation continue)</li>
+              <li><strong>Résultat :</strong> Tous les fichiers sont synchronisés en continu (toutes les 2-3 secondes par défaut) dans les deux sens :
+                <ul style={{ marginTop: '0.5rem' }}>
+                  <li>Les fichiers créés/modifiés sur le site apparaissent immédiatement dans le dossier local</li>
+                  <li>Les fichiers créés/modifiés dans le dossier local apparaissent immédiatement sur le site</li>
+                  <li>Les fichiers édités dans l'éditeur intégré sont sauvegardés automatiquement et synchronisés</li>
+                </ul>
+              </li>
             </ol>
             <br />
             Cette fonctionnalité nécessite Chrome, Edge ou Opera (API File System Access).
@@ -345,12 +350,15 @@ export const Settings = () => {
                       Intervalle (secondes) :
                       <input 
                         type="number" 
-                        min="10" 
+                        min="1" 
                         max="3600" 
                         value={syncInterval}
-                        onChange={(e) => setSyncInterval(parseInt(e.target.value) || 30)}
+                        onChange={(e) => setSyncInterval(parseInt(e.target.value) || 2)}
                         disabled={!autoSyncEnabled}
                       />
+                      <small style={{ display: 'block', marginTop: '0.25rem', color: '#666' }}>
+                        Recommandé : 2-3 secondes pour une synchronisation continue
+                      </small>
                     </label>
                     <button 
                       onClick={() => {

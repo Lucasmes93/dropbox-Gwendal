@@ -39,6 +39,8 @@ let syncInterval: ReturnType<typeof setInterval> | null = null;
 let isSyncing = false;
 let lastSyncTime: number | null = null;
 let syncPath: string | null = null;
+let webSocketUnsubscribers: Array<() => void> = []; // Pour stocker les désabonnements WebSocket
+let syncTimeoutRef = null; // Pour le debounce des synchronisations immédiates
 
 // Vérifier si l'API File System Access est disponible
 export const isFileSystemAccessSupported = () => {
@@ -269,9 +271,14 @@ export const syncFromLocalFolder = async (onProgress) => {
         const existingFile = filesByLocalPath.get(localFile.path);
 
         // Vérifier si le fichier a été modifié (comparer lastModified)
+        // On synchronise si :
+        // - Le fichier n'existe pas dans le backend
+        // - Le fichier n'a jamais été synchronisé
+        // - Le fichier local a été modifié après la dernière synchronisation
+        // - Le fichier local est plus récent (avec une marge de 1 seconde pour éviter les problèmes de timestamp)
         const needsUpdate = !existingFile || 
           !existingFile.lastLocalSync || 
-          existingFile.lastLocalSync < localFile.lastModified;
+          (localFile.lastModified > existingFile.lastLocalSync + 1000);
 
         if (needsUpdate) {
           // Déterminer le parentId en créant la structure de dossiers si nécessaire
@@ -299,7 +306,15 @@ export const syncFromLocalFolder = async (onProgress) => {
             });
           } else {
             // Créer un nouveau fichier dans le backend
-            await api.api.uploadFile(localFile.file, parentId, false);
+            const newFile = await api.api.uploadFile(localFile.file, parentId, false);
+            
+            // Mettre à jour le localPath et lastLocalSync pour le nouveau fichier
+            if (newFile && newFile.id) {
+              await api.api.updateFileMetadata(newFile.id, {
+                localPath: localFile.path,
+                lastLocalSync: localFile.lastModified,
+              });
+            }
           }
 
           syncedCount++;
@@ -325,7 +340,7 @@ export const syncFromLocalFolder = async (onProgress) => {
 };
 
 // Synchroniser les fichiers de l'application (backend) vers le dossier local
-export const syncToLocalFolder = async (onProgress) => {
+export const syncToLocalFolder = async (onProgress, specificFileId?: string) => {
   if (isSyncing) {
     return { success: false, error: 'Une synchronisation est déjà en cours' };
   }
@@ -342,9 +357,53 @@ export const syncToLocalFolder = async (onProgress) => {
     const api = await import('./api');
     const allFiles = await api.api.getFiles();
     
-    // Filtrer uniquement les fichiers qui ont un localPath (synchronisés depuis le local)
-    // ou tous les fichiers si on veut synchroniser tout
-    const appFiles = allFiles.filter(f => f.type === 'fichier' && !f.estSupprime);
+    // Si un fichier spécifique est demandé, ne synchroniser que celui-ci
+    let appFiles;
+    if (specificFileId) {
+      const specificFile = allFiles.find(f => f.id === specificFileId && f.type === 'fichier' && !f.estSupprime);
+      appFiles = specificFile ? [specificFile] : [];
+    } else {
+      // Filtrer tous les fichiers (pas seulement ceux avec localPath)
+      appFiles = allFiles.filter(f => f.type === 'fichier' && !f.estSupprime);
+    }
+
+    // D'abord, créer tous les dossiers nécessaires
+    const allFolders = allFiles.filter(f => f.type === 'dossier' && !f.estSupprime);
+    let foldersCreated = 0;
+    
+    // Créer les dossiers dans l'ordre hiérarchique (parents d'abord)
+    const foldersToCreate = [...allFolders].sort((a, b) => {
+      // Trier par profondeur (dossiers racine d'abord)
+      const depthA = getFolderDepth(a.id, allFolders);
+      const depthB = getFolderDepth(b.id, allFolders);
+      return depthA - depthB;
+    });
+
+    for (const folder of foldersToCreate) {
+      try {
+        const folderPath = await buildFilePathFromBackend(folder.id, allFiles);
+        if (folderPath) {
+          const pathParts = folderPath.split('/');
+          let currentDir = dirHandle;
+          
+          for (const dirName of pathParts) {
+            try {
+              currentDir = await currentDir.getDirectoryHandle(dirName, { create: true });
+            } catch (error) {
+              // Le dossier existe peut-être déjà, essayer de l'ouvrir
+              try {
+                currentDir = await currentDir.getDirectoryHandle(dirName);
+              } catch (e) {
+                break; // Impossible de créer/ouvrir, arrêter
+              }
+            }
+          }
+          foldersCreated++;
+        }
+      } catch (error) {
+        // Continuer avec le dossier suivant
+      }
+    }
 
     if (onProgress) {
       onProgress({ total: appFiles.length, current: 0, status: 'Téléchargement depuis le serveur...' });
@@ -402,8 +461,14 @@ export const syncToLocalFolder = async (onProgress) => {
           try {
             currentDir = await currentDir.getDirectoryHandle(dirName, { create: true });
           } catch (error) {
-            // Ignorer les erreurs et continuer
-            break;
+            // Si erreur, essayer de continuer avec le prochain niveau
+            // mais ne pas arrêter complètement
+            try {
+              currentDir = await currentDir.getDirectoryHandle(dirName);
+            } catch (e) {
+              // Si on ne peut vraiment pas accéder, arrêter ici
+              break;
+            }
           }
         }
 
@@ -434,6 +499,7 @@ export const syncToLocalFolder = async (onProgress) => {
     return {
       success: true,
       syncedCount,
+      foldersCreated,
       totalFiles: appFiles.length,
     };
   } catch (error) {
@@ -462,6 +528,14 @@ const buildFilePathFromBackend = async (fileId: string, allFiles: any[]): Promis
   return pathParts.join('/');
 };
 
+// Obtenir la profondeur d'un dossier dans la hiérarchie
+const getFolderDepth = (folderId: string, allFolders: any[]): number => {
+  const folder = allFolders.find(f => f.id === folderId);
+  if (!folder || !folder.parentId) return 0;
+  
+  return 1 + getFolderDepth(folder.parentId, allFolders);
+};
+
 // Synchronisation bidirectionnelle
 export const syncBidirectional = async (onProgress) => {
   // D'abord, synchroniser depuis le dossier local
@@ -479,8 +553,42 @@ export const syncBidirectional = async (onProgress) => {
   };
 };
 
+// Synchroniser un fichier/dossier spécifique vers le local (appelé quand créé/modifié sur le site)
+const syncSpecificItemToLocal = async (itemId, itemType) => {
+  if (!syncInterval) {
+    // La synchronisation automatique n'est pas active, ne rien faire
+    return;
+  }
+
+  // Utiliser un debounce pour éviter trop de synchronisations simultanées
+  if (syncTimeoutRef) {
+    clearTimeout(syncTimeoutRef);
+  }
+
+  syncTimeoutRef = setTimeout(async () => {
+    if (isSyncing) {
+      // Une synchronisation est déjà en cours, réessayer plus tard
+      return;
+    }
+
+    try {
+      if (itemType === 'fichier') {
+        // Synchroniser uniquement ce fichier vers le local
+        await syncToLocalFolder(null, itemId);
+      } else {
+        // Pour un dossier, synchroniser tous les fichiers
+        await syncToLocalFolder(null);
+      }
+    } catch (error) {
+      // Ignorer les erreurs silencieusement pour ne pas perturber l'utilisateur
+    }
+  }, 500); // Attendre 500ms pour grouper les actions rapides
+};
+
+let syncTimeoutRef = null;
+
 // Démarrer la synchronisation automatique
-export const startAutoSync = async (intervalMs = 30000) => {
+export const startAutoSync = async (intervalMs = 2000) => {
   // Vérifier que le handle existe
   if (!syncDirectoryHandle) {
     const folderName = localStorage.getItem('monDrive_syncFolderName');
@@ -504,6 +612,85 @@ export const startAutoSync = async (intervalMs = 30000) => {
   } catch (error) {
     // Ne pas bloquer le démarrage si la première sync échoue
   }
+
+  // Écouter les événements WebSocket pour synchroniser immédiatement les nouveaux fichiers/dossiers
+  const { onWebSocketEvent } = await import('./websocket');
+  
+  // Nettoyer les anciens écouteurs
+  webSocketUnsubscribers.forEach(unsub => unsub());
+  webSocketUnsubscribers = [];
+
+  // Écouter TOUTES les actions pour synchroniser immédiatement
+  
+  // Création de fichiers
+  const unsubFileCreated = onWebSocketEvent('file_created', (data) => {
+    if (data.file && data.file.id) {
+      syncSpecificItemToLocal(data.file.id, 'fichier');
+    }
+  });
+  webSocketUnsubscribers.push(unsubFileCreated);
+
+  // Création de dossiers
+  const unsubFolderCreated = onWebSocketEvent('folder_created', (data) => {
+    if (data.folder && data.folder.id) {
+      // Pour un dossier, synchroniser immédiatement (création de la structure)
+      syncToLocalFolder(null);
+    }
+  });
+  webSocketUnsubscribers.push(unsubFolderCreated);
+
+  // Mise à jour de fichiers (modification du contenu)
+  const unsubFileUpdated = onWebSocketEvent('file_updated', (data) => {
+    if (data.file && data.file.id) {
+      syncSpecificItemToLocal(data.file.id, 'fichier');
+    }
+  });
+  webSocketUnsubscribers.push(unsubFileUpdated);
+
+  // Renommage de fichiers/dossiers
+  const unsubFileRenamed = onWebSocketEvent('file_renamed', (data) => {
+    if (data.file && data.file.id) {
+      // Renommer nécessite une synchronisation complète pour mettre à jour les chemins
+      syncToLocalFolder(null);
+    }
+  });
+  webSocketUnsubscribers.push(unsubFileRenamed);
+
+  // Déplacement de fichiers/dossiers
+  const unsubFileMoved = onWebSocketEvent('file_moved', (data) => {
+    if (data.file && data.file.id) {
+      // Déplacer nécessite une synchronisation complète pour mettre à jour les chemins
+      syncToLocalFolder(null);
+    }
+  });
+  webSocketUnsubscribers.push(unsubFileMoved);
+
+  // Suppression de fichiers/dossiers
+  const unsubFileDeleted = onWebSocketEvent('file_deleted', (data) => {
+    if (data.fileId) {
+      // Supprimer nécessite une synchronisation complète pour supprimer du local
+      syncToLocalFolder(null);
+    }
+  });
+  webSocketUnsubscribers.push(unsubFileDeleted);
+
+  // Suppression définitive
+  const unsubFilePermanentlyDeleted = onWebSocketEvent('file_permanently_deleted', (data) => {
+    if (data.fileId) {
+      // Supprimer définitivement nécessite une synchronisation complète
+      syncToLocalFolder(null);
+    }
+  });
+  webSocketUnsubscribers.push(unsubFilePermanentlyDeleted);
+
+  // Restauration de fichiers/dossiers
+  const unsubFileRestored = onWebSocketEvent('file_restored', (data) => {
+    if (data.file && data.file.id) {
+      // Restaurer nécessite une synchronisation complète
+      syncToLocalFolder(null);
+    }
+  });
+  webSocketUnsubscribers.push(unsubFileRestored);
 
   syncInterval = setInterval(async () => {
     if (!isSyncing && syncDirectoryHandle) {
@@ -529,6 +716,16 @@ export const stopAutoSync = () => {
     clearInterval(syncInterval);
     syncInterval = null;
   }
+  
+  // Nettoyer le timeout de debounce
+  if (syncTimeoutRef) {
+    clearTimeout(syncTimeoutRef);
+    syncTimeoutRef = null;
+  }
+  
+  // Nettoyer les écouteurs WebSocket
+  webSocketUnsubscribers.forEach(unsub => unsub());
+  webSocketUnsubscribers = [];
 };
 
 // Obtenir le statut de la synchronisation

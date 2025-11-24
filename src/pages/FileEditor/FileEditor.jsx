@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../../components/Layout/Layout';
 import { useAuth } from '../../context/AuthContext';
-import { getFileContent, base64ToBlob, saveFileContent } from '../../services/storage';
 import { UserStatus } from '../../components/UserStatus/UserStatus';
+import api from '../../services/api';
+import { onWebSocketEvent } from '../../services/websocket';
 import './FileEditor.scss';
 
 
@@ -15,9 +16,12 @@ export const FileEditor = () => {
   const [file, setFile] = useState(null);
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
   const [collaborators, setCollaborators] = useState([]);
   const textareaRef = useRef(null);
   const cursorPositionRef = useRef(0);
+  const saveTimeoutRef = useRef(null);
   const colors = ['#4caf50', '#2196f3', '#ff9800', '#9c27b0', '#f44336'];
 
   useEffect(() => {
@@ -29,75 +33,90 @@ export const FileEditor = () => {
     loadFile();
     joinCollaboration();
     
+    // Écouter les mises à jour WebSocket
+    const unsubscribeFileUpdated = onWebSocketEvent('file_updated', (data) => {
+      if (data.file && data.file.id === fileId && data.userId !== user?.id) {
+        // Le fichier a été modifié par quelqu'un d'autre, recharger
+        loadFile();
+      }
+    });
+
     // Écouter les mises à jour de collaboration
     const handleCollaborationUpdate = () => {
       loadCollaborators();
     };
 
-    const handleContentUpdate = (event) => {
-      const customEvent = event;
-      // Ne pas mettre à jour si c'est notre propre modification
-      if (customEvent.detail?.userId !== user?.id) {
-        loadFile();
-      }
-    };
-
-    window.addEventListener('fileContentUpdated', handleContentUpdate);
     window.addEventListener('collaboratorUpdate', handleCollaborationUpdate);
 
-    // Écouter les changements de localStorage (pour la collaboration entre onglets)
-    const handleStorageChange = (e) => {
-      if (e.key === `monDrive_fileContent_${fileId}` || 
-          e.key === `monDrive_collaborators_${fileId}`) {
-        loadFile();
-        loadCollaborators();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
     return () => {
-      window.removeEventListener('fileContentUpdated', handleContentUpdate);
+      unsubscribeFileUpdated();
       window.removeEventListener('collaboratorUpdate', handleCollaborationUpdate);
-      window.removeEventListener('storage', handleStorageChange);
       leaveCollaboration();
+      // Annuler la sauvegarde en attente
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
     };
   }, [fileId]);
 
-  const loadFile = () => {
+  const loadFile = async () => {
     try {
-      const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
-        const allFiles = JSON.parse(saved);
-        const foundFile = allFiles.find(f => f.id === fileId && !f.estSupprime);
-        
-        if (!foundFile) {
-          navigate('/files');
-          return;
-        }
+      setLoading(true);
+      
+      // Charger les métadonnées du fichier depuis l'API
+      const fileData = await api.getFile(fileId);
+      
+      if (!fileData || fileData.estSupprime) {
+        navigate('/files');
+        return;
+      }
 
-        setFile(foundFile);
+      setFile(fileData);
 
-        // Charger le contenu
-        const fileContent = getFileContent(foundFile.id);
-        if (fileContent) {
-          // Pour les fichiers texte, décoder le base64
-          if (foundFile.mimeType?.startsWith('text/') || foundFile.extension === 'txt') {
-            const blob = base64ToBlob(fileContent, foundFile.mimeType);
-            blob.text().then(text => {
-              setContent(text);
-              setLoading(false);
-            });
-          } else {
-            // Pour les autres types, afficher un message
-            setContent('Ce type de fichier ne peut pas être édité dans cette version.');
-            setLoading(false);
-          }
+      // Vérifier si c'est un fichier texte éditable
+      const isTextFile = fileData.mimeType?.startsWith('text/') || 
+                        fileData.extension === 'txt' ||
+                        fileData.extension === 'js' ||
+                        fileData.extension === 'jsx' ||
+                        fileData.extension === 'ts' ||
+                        fileData.extension === 'tsx' ||
+                        fileData.extension === 'json' ||
+                        fileData.extension === 'css' ||
+                        fileData.extension === 'scss' ||
+                        fileData.extension === 'html' ||
+                        fileData.extension === 'xml' ||
+                        fileData.extension === 'md' ||
+                        fileData.extension === 'yaml' ||
+                        fileData.extension === 'yml';
+
+      if (!isTextFile) {
+        setContent('Ce type de fichier ne peut pas être édité dans cette version.');
+        setLoading(false);
+        return;
+      }
+
+      // Télécharger le contenu depuis l'API
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/files/${fileId}/download`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const text = await blob.text();
+          setContent(text);
         } else {
           setContent('');
-          setLoading(false);
         }
+      } catch (error) {
+        setContent('');
       }
+      
+      setLoading(false);
     } catch (error) {
       setLoading(false);
     }
@@ -153,39 +172,39 @@ export const FileEditor = () => {
     window.dispatchEvent(new Event('collaboratorUpdate'));
   };
 
+  const saveFile = async (contentToSave) => {
+    if (!fileId || !file) return;
+
+    try {
+      setSaving(true);
+      const blob = new Blob([contentToSave], { type: file.mimeType || 'text/plain' });
+      const fileObj = new File([blob], file.nom, { type: file.mimeType || 'text/plain' });
+      
+      // Sauvegarder via l'API backend
+      await api.updateFileContent(fileId, fileObj);
+      
+      setLastSaved(new Date());
+      
+      // Le fichier sera automatiquement synchronisé vers le dossier local via WebSocket
+      // (l'événement 'file_updated' déclenchera la synchronisation)
+    } catch (error) {
+      // Erreur silencieuse, on peut afficher une notification si nécessaire
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleContentChange = (newContent) => {
     setContent(newContent);
     
-    // Sauvegarder le contenu avec un timestamp pour éviter les conflits
-    if (fileId && file) {
-      const blob = new Blob([newContent], { type: file.mimeType || 'text/plain' });
-      const fileObj = new File([blob], file.nom, { type: file.mimeType || 'text/plain' });
-      
-      // Sauvegarder via le service de stockage
-      saveFileContent(fileId, fileObj).then(() => {
-        // Marquer la dernière modification avec notre userId
-        localStorage.setItem(`monDrive_fileLastEdit_${fileId}`, JSON.stringify({
-          userId: user?.id,
-          timestamp: Date.now(),
-        }));
-      });
-
-      // Mettre à jour la date de modification
-      const saved = localStorage.getItem('monDrive_files');
-      if (saved) {
-        const allFiles = JSON.parse(saved);
-        const updated = allFiles.map(f =>
-          f.id === fileId ? { ...f, dateModification: new Date().toISOString() } : f
-        );
-        localStorage.setItem('monDrive_files', JSON.stringify(updated));
-        window.dispatchEvent(new Event('filesUpdated'));
-      }
-
-      // Notifier les autres collaborateurs avec un événement personnalisé
-      window.dispatchEvent(new CustomEvent('fileContentUpdated', {
-        detail: { fileId, userId: user?.id }
-      }));
+    // Debounce : sauvegarder 1 seconde après la dernière modification
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
+    
+    saveTimeoutRef.current = setTimeout(() => {
+      saveFile(newContent);
+    }, 1000); // Sauvegarder 1 seconde après la dernière frappe
   };
 
   const handleCursorChange = () => {
@@ -207,44 +226,24 @@ export const FileEditor = () => {
   useEffect(() => {
     loadCollaborators();
     
-    // Vérifier les mises à jour de contenu des autres utilisateurs
-    const checkForUpdates = () => {
-      if (!fileId) return;
-      
-      try {
-        const saved = localStorage.getItem(`monDrive_fileContent_${fileId}`);
-        if (saved) {
-          const fileContent = getFileContent(fileId);
-          if (fileContent && file) {
-            if (file.mimeType?.startsWith('text/') || file.extension === 'txt') {
-              const blob = base64ToBlob(fileContent, file.mimeType);
-              blob.text().then(text => {
-                // Ne mettre à jour que si le contenu a changé et qu'on n'est pas en train de taper
-                if (text !== content && document.activeElement !== textareaRef.current) {
-                  setContent(text);
-                }
-              });
-            }
-          }
-        }
-      } catch (error) {
-      }
-    };
-
+    // Vérifier périodiquement les mises à jour depuis le serveur
     const interval = setInterval(() => {
       try {
         loadCollaborators();
-        checkForUpdates();
+        // Recharger le fichier toutes les 3 secondes pour voir les modifications des autres
+        if (document.activeElement !== textareaRef.current) {
+          loadFile();
+        }
       } catch (error) {
       }
-    }, 500); // Vérifier toutes les 500ms pour un temps réel plus fluide
+    }, 3000); // Vérifier toutes les 3 secondes
     
     return () => {
       if (interval) {
         clearInterval(interval);
       }
     };
-  }, [fileId, user, content, file]);
+  }, [fileId, user]);
 
   if (loading) {
     return (
@@ -305,10 +304,32 @@ export const FileEditor = () => {
 
         <div className="file-editor-footer">
           <div className="file-editor-info">
-            Dernière modification : {new Date(file.dateModification).toLocaleString('fr-FR')}
+            <div>
+              Dernière modification : {new Date(file.dateModification).toLocaleString('fr-FR')}
+            </div>
+            {saving && (
+              <div style={{ color: '#2196f3', marginLeft: '1rem' }}>
+                💾 Enregistrement...
+              </div>
+            )}
+            {lastSaved && !saving && (
+              <div style={{ color: '#4caf50', marginLeft: '1rem' }}>
+                ✓ Sauvegardé à {lastSaved.toLocaleTimeString('fr-FR')}
+              </div>
+            )}
           </div>
           <div className="file-editor-actions">
-            <button className="btn-primary" onClick={() => navigate('/files')}>
+            <button 
+              className="btn-primary" 
+              onClick={async () => {
+                // Sauvegarder avant de fermer
+                if (saveTimeoutRef.current) {
+                  clearTimeout(saveTimeoutRef.current);
+                }
+                await saveFile(content);
+                navigate('/files');
+              }}
+            >
               Enregistrer et fermer
             </button>
           </div>

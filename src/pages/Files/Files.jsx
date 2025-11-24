@@ -540,16 +540,19 @@ export const Files = () => {
                     <button onClick={() => handleDownload(contextMenu.item)}>
                       ⬇️ Télécharger
                     </button>
-                    {!canOpenInApp && (
-                      <button onClick={() => {
-                        if (item.extension === 'txt' || item.mimeType?.startsWith('text/')) {
+                    {(() => {
+                      const editableExtensions = ['txt', 'js', 'jsx', 'ts', 'tsx', 'json', 'css', 'scss', 'html', 'xml', 'md', 'yaml', 'yml', 'py', 'java', 'cpp', 'c', 'h', 'php', 'rb', 'go', 'rs', 'sh', 'bat', 'ps1'];
+                      const isEditable = editableExtensions.includes(item.extension?.toLowerCase()) || item.mimeType?.startsWith('text/');
+                      
+                      return isEditable && (
+                        <button onClick={() => {
                           navigate(`/editor/${item.id}`);
-                        }
-                        setContextMenu(null);
-                      }}>
-                        📝 Éditer
-                      </button>
-                    )}
+                          setContextMenu(null);
+                        }}>
+                          📝 Éditer
+                        </button>
+                      );
+                    })()}
                     <div className="menu-divider" />
                     <button onClick={() => {
                       setRenameModal({ open: true, item: contextMenu.item });
