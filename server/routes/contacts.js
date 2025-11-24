@@ -1,6 +1,6 @@
 import express from 'express';
 import { readJSON, writeJSON } from '../utils/storage.js';
-import { authenticate } from '../utils/auth.js';
+import { authenticate, isAdmin } from '../utils/auth.js';
 import { enrichUser } from '../utils/enrichUser.js';
 import { v4 as uuidv4 } from 'uuid';
 import { broadcast } from '../utils/broadcast.js';
@@ -145,6 +145,36 @@ router.delete('/:id', (req, res) => {
     });
 
     res.json({ message: 'Contact supprimé' });
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Synchroniser manuellement les utilisateurs vers les contacts (admin uniquement)
+router.post('/sync-users', isAdmin, async (req, res) => {
+  try {
+    const { syncUsersToContacts } = await import('../utils/syncUsersToContacts.js');
+    const result = syncUsersToContacts();
+    
+    if (result.success) {
+      // Créer un log d'activité
+      createActivityLog(req, 'contacts_synced', 'a synchronisé les utilisateurs vers les contacts', {
+        syncedCount: result.synced,
+      });
+      
+      // Diffuser l'événement
+      broadcast({
+        type: 'contacts_synced',
+        userId: req.user.id,
+      });
+      
+      res.json({ 
+        message: 'Synchronisation réussie',
+        synced: result.synced 
+      });
+    } else {
+      res.status(500).json({ error: 'Erreur lors de la synchronisation', details: result.error });
+    }
   } catch (error) {
     res.status(500).json({ error: 'Erreur serveur' });
   }

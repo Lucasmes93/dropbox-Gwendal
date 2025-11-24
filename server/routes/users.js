@@ -79,6 +79,10 @@ router.post('/', isAdmin, async (req, res) => {
     users.push(newUser);
     writeJSON('users.json', users);
 
+    // Synchroniser le nouvel utilisateur vers les contacts
+    const { syncNewUserToContacts } = await import('../utils/syncUsersToContacts.js');
+    syncNewUserToContacts(newUser);
+
     // Créer un log d'activité
     createActivityLog(req, 'user_created', `a créé l'utilisateur "${newUser.prenom} ${newUser.nom}"`, {
       userId: newUser.id,
@@ -203,6 +207,10 @@ router.patch('/:id', async (req, res) => {
     }
 
     writeJSON('users.json', users);
+
+    // Mettre à jour les contacts correspondants
+    const { updateUserInContacts } = await import('../utils/syncUsersToContacts.js');
+    updateUserInContacts(users[userIndex]);
 
     // Créer un log d'activité
     const updatedFields = [];
@@ -367,10 +375,9 @@ router.delete('/:id', isAdmin, async (req, res) => {
     });
     writeJSON('boards.json', finalBoards);
 
-    // 8. Supprimer tous les contacts de l'utilisateur
-    const contacts = readJSON('contacts.json') || [];
-    const remainingContacts = contacts.filter(c => c.userId !== userId);
-    writeJSON('contacts.json', remainingContacts);
+    // 8. Supprimer tous les contacts de l'utilisateur ET les contacts synchronisés automatiquement
+    const { removeUserFromContacts } = await import('../utils/syncUsersToContacts.js');
+    removeUserFromContacts(userToDelete.email, userId);
 
     // 12. Supprimer l'utilisateur
     users.splice(userIndex, 1);

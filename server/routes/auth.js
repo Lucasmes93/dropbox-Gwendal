@@ -86,6 +86,10 @@ router.post('/register', async (req, res) => {
     users.push(newUser);
     writeJSON('users.json', users);
 
+    // Synchroniser le nouvel utilisateur vers les contacts
+    const { syncNewUserToContacts } = await import('../utils/syncUsersToContacts.js');
+    syncNewUserToContacts(newUser);
+
     // Générer le token
     const token = generateToken(newUser);
 

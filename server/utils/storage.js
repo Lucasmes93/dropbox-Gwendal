@@ -138,6 +138,10 @@ export const initializeData = async () => {
   if (!readJSON('contacts.json')) {
     writeJSON('contacts.json', []);
   }
+
+  // Synchroniser automatiquement les utilisateurs vers les contacts
+  const { syncUsersToContacts } = await import('./syncUsersToContacts.js');
+  syncUsersToContacts();
 };
 
 // Exporter DATA_DIR pour les uploads
