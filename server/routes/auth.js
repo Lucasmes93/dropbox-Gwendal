@@ -1,6 +1,7 @@
 import express from 'express';
 import { readJSON, writeJSON, initializeData } from '../utils/storage.js';
 import { generateToken, hashPassword, comparePassword, verifyToken } from '../utils/auth.js';
+import { isBlocked, recordFailedAttempt, resetAttempts, getRemainingBlockTime } from '../utils/rateLimiter.js';
 
 const router = express.Router();
 
@@ -12,6 +13,16 @@ initializeData().catch(err => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    const clientIp = req.ip || req.connection.remoteAddress;
+
+    // Vérifier si l'IP est bloquée
+    if (isBlocked(clientIp)) {
+      const remainingMinutes = getRemainingBlockTime(clientIp);
+      return res.status(429).json({ 
+        error: `Trop de tentatives de connexion. Veuillez réessayer dans ${remainingMinutes} minute(s).`,
+        remainingMinutes
+      });
+    }
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email et mot de passe requis' });
@@ -21,7 +32,17 @@ router.post('/login', async (req, res) => {
     const user = users.find(u => u.email === email);
 
     if (!user) {
-      return res.status(401).json({ error: 'Identifiants incorrects' });
+      const attemptResult = recordFailedAttempt(clientIp);
+      if (attemptResult.blocked) {
+        return res.status(429).json({ 
+          error: `Trop de tentatives échouées. Compte temporairement bloqué pour ${attemptResult.blockedMinutes} minutes.`,
+          remainingMinutes: attemptResult.blockedMinutes
+        });
+      }
+      return res.status(401).json({ 
+        error: 'Identifiants incorrects',
+        remainingAttempts: attemptResult.remainingAttempts
+      });
     }
 
     if (user.bloque) {
@@ -36,8 +57,21 @@ router.post('/login', async (req, res) => {
     const isValidPassword = await comparePassword(password, user.password);
 
     if (!isValidPassword) {
-      return res.status(401).json({ error: 'Mot de passe incorrect' });
+      const attemptResult = recordFailedAttempt(clientIp);
+      if (attemptResult.blocked) {
+        return res.status(429).json({ 
+          error: `Trop de tentatives échouées. Compte temporairement bloqué pour ${attemptResult.blockedMinutes} minutes.`,
+          remainingMinutes: attemptResult.blockedMinutes
+        });
+      }
+      return res.status(401).json({ 
+        error: 'Mot de passe incorrect',
+        remainingAttempts: attemptResult.remainingAttempts
+      });
     }
+
+    // Connexion réussie, réinitialiser les tentatives
+    resetAttempts(clientIp);
 
     // Générer le token
     const token = generateToken(user);

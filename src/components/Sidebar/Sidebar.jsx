@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 import './Sidebar.scss';
 
 export const Sidebar = ({ mobileOpen, onMobileClose }) => {
@@ -9,6 +10,8 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
   const { user } = useAuth();
   const [storageUsed, setStorageUsed] = useState(0);
   const [storageTotal] = useState(10 * 1024 * 1024 * 1024); // 10 Go
+  const [pinnedFolders, setPinnedFolders] = useState([]);
+  const [allFolders, setAllFolders] = useState([]);
 
   useEffect(() => {
     const calculateStorage = () => {
@@ -30,6 +33,61 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
     window.addEventListener('filesUpdated', handleUpdate);
     return () => window.removeEventListener('filesUpdated', handleUpdate);
   }, []);
+
+  useEffect(() => {
+    loadFolders();
+    loadPinnedFolders();
+    
+    // Écouter les changements de dossiers épinglés
+    const handlePinnedFoldersChanged = () => {
+      loadPinnedFolders();
+    };
+    
+    window.addEventListener('pinnedFoldersChanged', handlePinnedFoldersChanged);
+    window.addEventListener('filesUpdated', loadFolders);
+    
+    return () => {
+      window.removeEventListener('pinnedFoldersChanged', handlePinnedFoldersChanged);
+      window.removeEventListener('filesUpdated', loadFolders);
+    };
+  }, [user]);
+
+  const loadFolders = async () => {
+    try {
+      const files = await api.getFiles();
+      const folders = files.filter(f => f.type === 'dossier' && !f.estSupprime);
+      setAllFolders(folders);
+    } catch (error) {
+      setAllFolders([]);
+    }
+  };
+
+  const loadPinnedFolders = () => {
+    try {
+      const saved = localStorage.getItem(`monDrive_pinnedFolders_${user?.id}`);
+      if (saved) {
+        setPinnedFolders(JSON.parse(saved));
+      }
+    } catch (error) {
+      setPinnedFolders([]);
+    }
+  };
+
+  const togglePinFolder = (folderId) => {
+    const newPinned = pinnedFolders.includes(folderId)
+      ? pinnedFolders.filter(id => id !== folderId)
+      : [...pinnedFolders, folderId];
+    
+    setPinnedFolders(newPinned);
+    localStorage.setItem(`monDrive_pinnedFolders_${user?.id}`, JSON.stringify(newPinned));
+  };
+
+  const navigateToFolder = (folderId) => {
+    if (onMobileClose) {
+      onMobileClose();
+    }
+    navigate(`/files?folder=${folderId}`);
+  };
 
   const storageUsedMB = storageUsed / (1024 * 1024);
   const isActive = (path) => location.pathname === path;
@@ -102,6 +160,39 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
 
       <div className="sidebar-divider" />
 
+      {pinnedFolders.length > 0 && (
+        <>
+          <div className="sidebar-section">
+            <div className="sidebar-section-title">Dossiers épinglés</div>
+            {pinnedFolders.map(folderId => {
+              const folder = allFolders.find(f => f.id === folderId);
+              if (!folder) return null;
+              return (
+                <div 
+                  key={folder.id}
+                  className="sidebar-item pinned-folder"
+                  onClick={() => navigateToFolder(folder.id)}
+                >
+                  <span className="sidebar-icon">📌</span>
+                  {folder.nom}
+                  <button
+                    className="unpin-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      togglePinFolder(folder.id);
+                    }}
+                    title="Désépingler"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="sidebar-divider" />
+        </>
+      )}
+
       <div className="sidebar-section">
         <div className="sidebar-section-title">Applications</div>
         <div 
@@ -157,8 +248,8 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
           className={`sidebar-item ${isActive('/activity') ? 'active' : ''}`}
           onClick={() => handleNavClick('/activity')}
         >
-          <span className="sidebar-icon">🔔</span>
-          Activité
+          <span className="sidebar-icon">📋</span>
+          Journal
         </div>
       </div>
 

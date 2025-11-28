@@ -19,6 +19,9 @@ export const FileEditor = () => {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [collaborators, setCollaborators] = useState([]);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockedBy, setLockedBy] = useState(null);
+  const [lockedByName, setLockedByName] = useState('');
   const textareaRef = useRef(null);
   const cursorPositionRef = useRef(0);
   const saveTimeoutRef = useRef(null);
@@ -32,6 +35,7 @@ export const FileEditor = () => {
 
     loadFile();
     joinCollaboration();
+    lockFile();
     
     // Écouter les mises à jour WebSocket
     const unsubscribeFileUpdated = onWebSocketEvent('file_updated', (data) => {
@@ -52,12 +56,41 @@ export const FileEditor = () => {
       unsubscribeFileUpdated();
       window.removeEventListener('collaboratorUpdate', handleCollaborationUpdate);
       leaveCollaboration();
+      unlockFile();
       // Annuler la sauvegarde en attente
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
     };
   }, [fileId]);
+
+  const lockFile = async () => {
+    try {
+      const result = await api.lockFile(fileId);
+      if (result.locked) {
+        setIsLocked(false);
+        setLockedBy(null);
+        setLockedByName('');
+      }
+    } catch (error) {
+      if (error.message && error.message.includes('verrouillé')) {
+        setIsLocked(true);
+        // Extraire les informations du message d'erreur
+        const match = error.message.match(/par (.+)$/);
+        if (match) {
+          setLockedByName(match[1]);
+        }
+      }
+    }
+  };
+
+  const unlockFile = async () => {
+    try {
+      await api.unlockFile(fileId);
+    } catch (error) {
+      // Ignorer les erreurs de déverrouillage
+    }
+  };
 
   const loadFile = async () => {
     try {
@@ -69,6 +102,22 @@ export const FileEditor = () => {
       if (!fileData || fileData.estSupprime) {
         navigate('/files');
         return;
+      }
+
+      // Vérifier si le fichier est verrouillé
+      if (fileData.lockedBy && fileData.lockedBy !== user?.id) {
+        setIsLocked(true);
+        setLockedBy(fileData.lockedBy);
+        // Charger le nom de l'utilisateur qui a verrouillé
+        try {
+          const users = await api.getUsers();
+          const locker = users.find(u => u.id === fileData.lockedBy);
+          if (locker) {
+            setLockedByName(`${locker.prenom} ${locker.nom}`);
+          }
+        } catch (error) {
+          setLockedByName('Un utilisateur');
+        }
       }
 
       setFile(fileData);
@@ -270,6 +319,11 @@ export const FileEditor = () => {
               ← Retour
             </button>
             <h1>{file.nom}</h1>
+            {isLocked && (
+              <div className="file-locked-badge">
+                🔒 Verrouillé par {lockedByName}
+              </div>
+            )}
           </div>
           <div className="file-editor-collaborators">
             <span className="collaborators-label">Éditeurs :</span>
@@ -288,6 +342,12 @@ export const FileEditor = () => {
           </div>
         </div>
 
+        {isLocked && (
+          <div className="file-locked-warning">
+            ⚠️ Ce fichier est actuellement édité par {lockedByName}. Vous ne pouvez pas le modifier pour le moment.
+          </div>
+        )}
+
         <div className="file-editor-content">
           <textarea
             ref={textareaRef}
@@ -298,6 +358,7 @@ export const FileEditor = () => {
             onClick={handleCursorChange}
             onKeyUp={handleCursorChange}
             placeholder="Commencez à taper..."
+            disabled={isLocked}
             spellCheck={false}
           />
         </div>

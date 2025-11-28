@@ -132,7 +132,7 @@ export const Activity = () => {
     <Layout>
       <div className="activity-page">
         <div className="activity-header">
-          <h1>Activité</h1>
+          <h1>Journal</h1>
           <div className="activity-filters">
             {activityTypes.map(type => (
               <button
@@ -168,7 +168,7 @@ export const Activity = () => {
         </div>
 
         {filteredActivities.length === 0 && (
-          <div className="empty-state">Aucune activité</div>
+          <div className="empty-state">Aucune entrée dans le journal</div>
         )}
       </div>
     </Layout>

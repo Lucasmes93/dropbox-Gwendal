@@ -6,7 +6,7 @@ import { SearchBar } from '../SearchBar/SearchBar';
 import { ChatPanel } from '../ChatPanel/ChatPanel';
 import { Notifications } from '../Notifications/Notifications';
 import { UserStatus } from '../UserStatus/UserStatus';
-import { isSyncActive, getLastSyncTimestamp } from '../../services/sync';
+import { getSyncStatus } from '../../services/folderSync';
 import './Layout.scss';
 
 export const Layout = ({ children }) => {
@@ -20,18 +20,16 @@ export const Layout = ({ children }) => {
   const [lastSync, setLastSync] = useState(null);
 
   useEffect(() => {
-    // Mettre à jour le statut de synchronisation (moins fréquemment pour éviter les re-renders)
+    // Mettre à jour le statut de synchronisation du dossier local
     const updateSyncStatus = () => {
-      const active = isSyncActive();
-      const timestamp = getLastSyncTimestamp();
+      const folderSyncStatus = getSyncStatus();
       setSyncStatus(prev => {
-        const newStatus = active ? 'synced' : 'error';
-        return prev !== newStatus ? newStatus : prev; // Ne mettre à jour que si changé
+        const newStatus = folderSyncStatus.isActive ? 'synced' : 'error';
+        return prev !== newStatus ? newStatus : prev;
       });
-      if (timestamp) {
-        const newDate = new Date(timestamp);
+      if (folderSyncStatus.lastSyncTime) {
+        const newDate = new Date(folderSyncStatus.lastSyncTime);
         setLastSync(prev => {
-          // Ne mettre à jour que si la date a vraiment changé (plus de 1 seconde de différence)
           if (!prev || Math.abs(newDate.getTime() - prev.getTime()) > 1000) {
             return newDate;
           }
@@ -40,7 +38,7 @@ export const Layout = ({ children }) => {
       }
     };
 
-    // Mettre à jour toutes les 3 secondes (réduit de 1 seconde)
+    // Mettre à jour toutes les 3 secondes
     const interval = setInterval(updateSyncStatus, 3000);
     updateSyncStatus();
 
@@ -85,11 +83,11 @@ export const Layout = ({ children }) => {
           <SearchBar />
         </div>
         <div className="header-right">
-          <div className="sync-status" title={lastSync ? `Dernière sync: ${lastSync.toLocaleTimeString('fr-FR')}` : 'Synchronisation active'}>
+          <div className="sync-status" title={syncStatus === 'synced' && lastSync ? `Synchronisation active - Dernière sync: ${lastSync.toLocaleTimeString('fr-FR')}` : 'Synchronisation désactivée'}>
             <span className={`sync-indicator ${syncStatus}`}>
               {syncStatus === 'synced' ? '✓' : syncStatus === 'syncing' ? '⟳' : '⚠'}
             </span>
-            <span className="sync-text">Sync auto</span>
+            <span className="sync-text">{syncStatus === 'synced' ? 'Sync active' : 'Sync off'}</span>
           </div>
           <button 
             className="chat-button"

@@ -53,6 +53,34 @@
   text-align: center;
 }
 
+.pinned-folder {
+  position: relative;
+  padding-right: 3rem;
+  
+  .unpin-button {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.25rem 0.5rem;
+    opacity: 0;
+    transition: opacity 0.2s, color 0.2s;
+    
+    &:hover {
+      color: #d32f2f;
+    }
+  }
+  
+  &:hover .unpin-button {
+    opacity: 1;
+  }
+}
+
 .sidebar-divider {
   height: 1px;
   background: #ddd;

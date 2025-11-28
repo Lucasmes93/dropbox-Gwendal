@@ -34,6 +34,11 @@ export const Files = () => {
   const [shareModal, setShareModal] = useState({ open: false });
   const [tagModal, setTagModal] = useState({ open: false, item: null });
   const [contextMenu, setContextMenu] = useState(null);
+  const [sortBy, setSortBy] = useState('name'); // 'name', 'type', 'size', 'date'
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc', 'desc'
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dragOverItem, setDragOverItem] = useState(null);
+  const [pinnedFolders, setPinnedFolders] = useState([]);
   const createButtonRef = useRef(null);
 
   // Charger depuis l'API
@@ -43,6 +48,7 @@ export const Files = () => {
   // Charger les fichiers depuis l'API au montage
   useEffect(() => {
     loadFiles();
+    loadPinnedFolders();
     
     // Connexion WebSocket pour les mises à jour en temps réel
     if (user?.id) {
@@ -108,6 +114,29 @@ export const Files = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadPinnedFolders = () => {
+    try {
+      const saved = localStorage.getItem(`monDrive_pinnedFolders_${user?.id}`);
+      if (saved) {
+        setPinnedFolders(JSON.parse(saved));
+      }
+    } catch (error) {
+      setPinnedFolders([]);
+    }
+  };
+
+  const togglePinFolder = (folderId) => {
+    const newPinned = pinnedFolders.includes(folderId)
+      ? pinnedFolders.filter(id => id !== folderId)
+      : [...pinnedFolders, folderId];
+    
+    setPinnedFolders(newPinned);
+    localStorage.setItem(`monDrive_pinnedFolders_${user?.id}`, JSON.stringify(newPinned));
+    
+    // Déclencher un événement pour mettre à jour la sidebar
+    window.dispatchEvent(new CustomEvent('pinnedFoldersChanged'));
   };
 
   // Écouter les événements de mise à jour pour recharger depuis l'API
@@ -300,6 +329,126 @@ export const Files = () => {
     setContextMenu(null);
   };
 
+  const handleDragStart = (e, item) => {
+    setDraggedItem(item);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', e.target);
+  };
+
+  const handleDragOver = (e, item) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    // Ne permettre le drop que sur les dossiers
+    if (item && item.type === 'dossier' && draggedItem && item.id !== draggedItem.id) {
+      setDragOverItem(item);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragOverItem(null);
+  };
+
+  const handleDrop = async (e, targetFolder) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setDragOverItem(null);
+    
+    if (!draggedItem) return;
+    
+    // Ne pas déplacer un dossier dans lui-même
+    if (draggedItem.id === targetFolder?.id) {
+      setDraggedItem(null);
+      return;
+    }
+    
+    // Ne pas déplacer un dossier parent dans un de ses enfants
+    if (targetFolder && draggedItem.type === 'dossier') {
+      let currentParent = targetFolder;
+      while (currentParent) {
+        if (currentParent.id === draggedItem.id) {
+          notifyError(
+            'Déplacement impossible',
+            'Impossible de déplacer un dossier dans un de ses sous-dossiers',
+            'Opération non autorisée',
+            'move'
+          );
+          setDraggedItem(null);
+          return;
+        }
+        currentParent = allFiles.find(f => f.id === currentParent.parentId);
+      }
+    }
+    
+    try {
+      const newParentId = targetFolder ? targetFolder.id : null;
+      
+      // Vérifier si le fichier/dossier est déjà dans ce dossier
+      if (draggedItem.parentId === newParentId) {
+        setDraggedItem(null);
+        return;
+      }
+      
+      // Déplacer via l'API
+      await api.moveFile(draggedItem.id, newParentId);
+      
+      // Recharger les fichiers
+      await loadFiles();
+      
+      notifySuccess(
+        'Déplacement réussi',
+        `"${draggedItem.nom}" a été déplacé avec succès`,
+        'move'
+      );
+    } catch (error) {
+      notifyError(
+        'Erreur de déplacement',
+        `Impossible de déplacer "${draggedItem.nom}"`,
+        error?.message || 'Erreur serveur',
+        'move'
+      );
+    } finally {
+      setDraggedItem(null);
+    }
+  };
+
+  const handleDropOnBreadcrumb = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!draggedItem) return;
+    
+    // Déplacer vers le dossier courant
+    const targetFolderId = currentFolderId;
+    
+    if (draggedItem.parentId === targetFolderId) {
+      setDraggedItem(null);
+      return;
+    }
+    
+    try {
+      await api.moveFile(draggedItem.id, targetFolderId || null);
+      await loadFiles();
+      
+      notifySuccess(
+        'Déplacement réussi',
+        `"${draggedItem.nom}" a été déplacé avec succès`,
+        'move'
+      );
+    } catch (error) {
+      notifyError(
+        'Erreur de déplacement',
+        `Impossible de déplacer "${draggedItem.nom}"`,
+        error?.message || 'Erreur serveur',
+        'move'
+      );
+    } finally {
+      setDraggedItem(null);
+    }
+  };
+
   const handleCreateOfficeFile = async (type) => {
     if (!type) {
       return;
@@ -385,9 +534,42 @@ export const Files = () => {
     }
   };
 
-  const filteredFiles = files.filter(file =>
-    file.nom.toLowerCase().includes(searchQuery.toLowerCase()) && !file.estSupprime
-  );
+  const filteredFiles = files
+    .filter(file =>
+      file.nom.toLowerCase().includes(searchQuery.toLowerCase()) && !file.estSupprime
+    )
+    .sort((a, b) => {
+      let comparison = 0;
+      
+      // Toujours mettre les dossiers avant les fichiers
+      if (a.type === 'dossier' && b.type === 'fichier') return -1;
+      if (a.type === 'fichier' && b.type === 'dossier') return 1;
+      
+      // Tri selon le critère sélectionné
+      switch (sortBy) {
+        case 'name':
+          comparison = a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' });
+          break;
+        case 'type':
+          const extA = a.extension || '';
+          const extB = b.extension || '';
+          comparison = extA.localeCompare(extB, 'fr', { sensitivity: 'base' });
+          if (comparison === 0) {
+            comparison = a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' });
+          }
+          break;
+        case 'size':
+          comparison = (a.taille || 0) - (b.taille || 0);
+          break;
+        case 'date':
+          comparison = new Date(a.dateModification).getTime() - new Date(b.dateModification).getTime();
+          break;
+        default:
+          comparison = 0;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
 
   return (
     <Layout>
@@ -421,9 +603,39 @@ export const Files = () => {
               )}
             </div>
           </div>
+          <div className="toolbar-right">
+            <div className="sort-controls">
+              <label htmlFor="sort-by" style={{ marginRight: '0.5rem', fontSize: '0.9rem' }}>Trier par :</label>
+              <select 
+                id="sort-by"
+                value={sortBy} 
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{ marginRight: '0.5rem', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #ddd' }}
+              >
+                <option value="name">Nom</option>
+                <option value="type">Type</option>
+                <option value="size">Taille</option>
+                <option value="date">Date</option>
+              </select>
+              <button 
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #ddd', background: 'white', cursor: 'pointer' }}
+                title={sortOrder === 'asc' ? 'Ordre croissant' : 'Ordre décroissant'}
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="breadcrumb">
+        <div 
+          className="breadcrumb"
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+          }}
+          onDrop={handleDropOnBreadcrumb}
+        >
           {currentPath.map((path, index) => (
             <span key={index}>
               <button
@@ -464,7 +676,16 @@ export const Files = () => {
                 </tr>
               ) : (
                 filteredFiles.map((file) => (
-                  <tr key={file.id}>
+                  <tr 
+                    key={file.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, file)}
+                    onDragOver={(e) => file.type === 'dossier' ? handleDragOver(e, file) : e.preventDefault()}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => file.type === 'dossier' ? handleDrop(e, file) : e.preventDefault()}
+                    className={`${draggedItem?.id === file.id ? 'dragging' : ''} ${dragOverItem?.id === file.id ? 'drag-over' : ''}`}
+                    style={{ cursor: 'move' }}
+                  >
                     <td 
                       onClick={() => handleFileClick(file)} 
                       className={`file-name ${file.type === 'fichier' ? 'file-clickable' : ''}`}
@@ -594,6 +815,19 @@ export const Files = () => {
                     }}>
                       {contextMenu.item.estFavori ? '⭐ Retirer des favoris' : '⭐ Ajouter aux favoris'}
                     </button>
+                    {contextMenu.item.type === 'dossier' && (
+                      <button onClick={() => {
+                        togglePinFolder(contextMenu.item.id);
+                        setContextMenu(null);
+                        notifySuccess(
+                          pinnedFolders.includes(contextMenu.item.id) ? 'Dossier désépinglé' : 'Dossier épinglé',
+                          `"${contextMenu.item.nom}" ${pinnedFolders.includes(contextMenu.item.id) ? 'a été retiré de' : 'a été ajouté à'} la barre latérale`,
+                          'pin'
+                        );
+                      }}>
+                        {pinnedFolders.includes(contextMenu.item.id) ? '📌 Désépingler' : '📌 Épingler dans la barre'}
+                      </button>
+                    )}
                     <div className="menu-divider" />
                     <button onClick={() => handleDelete(contextMenu.item)} className="danger">
                       🗑️ Supprimer
